@@ -316,7 +316,7 @@ const parseMessage = (message) => {
             children.push(
               h(LottieDot, {
                 animationUrl: lottiePath,
-                loop: is_face,
+                loop: is_face && Number.parseInt(face_id) !== 114,
                 autoplay: true,
                 class: 'message-super-emoji-lottie message-box-less',
                 'data-face-id': face_id,

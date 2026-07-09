@@ -5,18 +5,22 @@
       v-if="animationUrl"
       :src="animationUrl"
       :loop="loop"
-      :autoplay="false"
+      :autoplay="autoplay"
       auto-resize-canvas
       style="width: 100%; height: 100%;"
+      useFrameInterpolation
+      freezeOnOffscreen
     />
     <DotLottieVue
       ref="dotPlayer"
       v-else-if="animJsonStr"
       :data="animJsonStr"
       :loop="loop"
-      :autoplay="false"
+      :autoplay="autoplay"
       auto-resize-canvas
       style="width: 100%; height: 100%;"
+      useFrameInterpolation
+      freezeOnOffscreen
     />
   </div>
 </template>
@@ -45,7 +49,6 @@ export default {
     }
   },
   mounted() {
-    this.initObserver()
     this.$nextTick(() => {
       this.bindDotInstance()
     })
@@ -59,35 +62,11 @@ export default {
       if (!player) return
       this.dotInstance = player.getDotLottieInstance()
     },
-    initObserver() {
-      this.observer = new IntersectionObserver(
-        entries => {
-          entries.forEach(entry => {
-            if (entry.isIntersecting) this.handleVisible()
-            else this.handleHidden()
-          })
-        },
-        { rootMargin: this.rootMargin }
-      )
-      this.observer.observe(this.$refs.lottieContainer)
-    },
     destroyObserver() {
       if (this.observer) {
         this.observer.disconnect()
         this.observer = null
       }
-    },
-    async handleVisible() {
-      if (!this.hasLoaded) {
-        await this.loadAnimation()
-        this.hasLoaded = true
-        if (this.autoplay) this.play()
-      } else {
-        this.play()
-      }
-    },
-    handleHidden() {
-      this.pause()
     },
     async loadAnimation() {
       // 优先本地对象，转字符串
