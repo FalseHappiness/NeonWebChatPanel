@@ -2,6 +2,8 @@
 
 一个基于 Web 的 QQ 聊天面板，通过 [NapCatQQ](https://github.com/NapNeko/NapCatQQ) 的 WebSocket 接口获取消息并展示。
 
+该项目并不完善，正在开发测试中。
+
 ---
 
 ## 使用说明
