@@ -23,6 +23,7 @@ import LoadingImage from "../components/utils/LoadingImage.vue";
 import MultiMsg from "../components/MessageTypes/MessageJSON/MultiMsg.vue";
 import FeedLua from "../components/MessageTypes/MessageJSON/FeedLua.vue";
 import ContactLua from "../components/MessageTypes/MessageJSON/ContactLua.vue";
+import LottieDot from "../components/utils/LottieDot.vue";
 
 
 const formatTime = (message) => {
@@ -313,7 +314,7 @@ const parseMessage = (message) => {
           if (emojiFiles.includes(lottiePath)) {
             // 加载 Lottie
             children.push(
-              h(LottieCanvas, {
+              h(LottieDot, {
                 animationUrl: lottiePath,
                 loop: is_face,
                 autoplay: true,

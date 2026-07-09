@@ -91,7 +91,8 @@ export default {
       if (animData) {
         this.animation = lottie.loadAnimation({
           container: this.$refs.lottieContainer,
-          renderer: 'canvas',
+          // renderer: 'canvas',
+          renderer: 'svg',
           loop: this.loop,
           autoplay: this.autoplay,
           animationData: animData,

@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@imengyu/vue3-context-menu": "^1.5.1",
+    "@lottiefiles/dotlottie-vue": "^0.11.19",
     "@lottiefiles/lottie-player": "^2.0.12",
     "@tenrok/vue3-device-detect": "^1.0.1",
     "ant-design-vue": "^4.2.6",
