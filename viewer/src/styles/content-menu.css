@@ -1,0 +1,69 @@
+.mx-menu-bar.mac, .mx-context-menu.mac {
+    backdrop-filter: blur(10px);
+    box-shadow: 0 5px 20px 0 rgb(48 48 48 / 20%);
+    min-width: unset !important;
+    --mx-menu-backgroud: rgb(255 255 255 / 75%);
+    --mx-menu-hover-backgroud: #0000000A;
+    --mx-menu-active-backgroud: #0000001F;
+    --mx-menu-open-backgroud: rgb(255 255 255 / 75%);
+    --mx-menu-open-hover-backgroud: #0000000A;
+    --mx-menu-open-active-backgroud: #0000001F;
+    --mx-menu-text: black;
+    --mx-menu-hover-text: black;
+    --mx-menu-active-text: black;
+    --mx-menu-open-text: black;
+    --mx-menu-open-hover-text: black;
+    --mx-menu-border-color: rgb(215 215 215 / 75%);
+    --mx-menu-divider: #e4e4e4;
+}
+
+.mx-menu-bar.mac .mx-context-menu-item, .mx-context-menu.mac .mx-context-menu-item {
+    margin: 4px 4px 4px 3px;
+}
+
+.mx-menu-bar.mac, .mx-context-menu.mac {
+    padding: 0;
+}
+
+.mx-context-menu-item:hover .mx-icon-placeholder img {
+    animation: content-menu-img-animation 0.5s ease-in-out;
+}
+
+.mx-context-menu-item .mx-icon-placeholder img {
+    width: 17px !important;
+    height: 17px !important;
+    margin: auto;
+}
+
+.mx-context-menu-item .label {
+    padding-inline-end: 6px;
+    padding-left: 6px;
+}
+
+@keyframes content-menu-img-animation {
+    0% {
+        transform: scale(1);
+    }
+    25% {
+        transform: scale(1.1);
+    }
+    50% {
+        transform: scale(1);
+    }
+    75% {
+        transform: scale(1.05);
+    }
+    100% {
+        transform: scale(1);
+    }
+}
+
+.mx-context-menu-item-sperator {
+    display: block;
+    padding: 0;
+    background-color: transparent;
+}
+
+.mx-context-menu-item-sperator:after {
+    height: 0.5px;
+}

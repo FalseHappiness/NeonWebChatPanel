@@ -1,0 +1,1 @@
+ffmpeg -c:v libvpx-vp9 -i video.webm -loop 1 output.webp

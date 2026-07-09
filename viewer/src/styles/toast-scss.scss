@@ -1,0 +1,16 @@
+@charset "UTF-8";
+
+@use "./vue-toastification/src/scss/variables" with (
+  $vt-mobile: "none",
+  $vt-not-mobile: "all"
+);
+
+@use "./vue-toastification/src/scss/toastContainer";
+@use "./vue-toastification/src/scss/toast";
+@use "./vue-toastification/src/scss/closeButton";
+@use "./vue-toastification/src/scss/progressBar";
+@use "./vue-toastification/src/scss/icon";
+
+@use "./vue-toastification/src/scss/animations/bounce";
+@use "./vue-toastification/src/scss/animations/fade";
+@use "./vue-toastification/src/scss/animations/slideBlurred";

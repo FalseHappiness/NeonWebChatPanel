@@ -1,0 +1,13 @@
+.Vue-Toastification__toast {
+    min-width: unset;
+    min-height: unset;
+    padding: 10px 12px;
+    color: black;
+    background-color: white;
+}
+
+.Vue-Toastification__icon {
+    margin: auto 6px auto 0;
+    height: 20px;
+    width: 20px;
+}
