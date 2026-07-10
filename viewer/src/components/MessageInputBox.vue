@@ -1,24 +1,33 @@
 <script>
-import { defineComponent, toRaw } from 'vue'
+import { defineComponent, toRaw, inject } from 'vue'
 import VueResizable from 'vue-resizable';
 import ColorSvg from "./utils/ColorSvg.vue";
 import SimpleBar from "simplebar-vue";
 import 'simplebar-vue/dist/simplebar.min.css';
 import Tooltip from "./utils/Tooltip.vue";
 import { useGlobalStore } from "../store/global.js";
-import { fetchForwardSingleMsg, fetchSendFiles, fetchSendMessage, getGroupUsers } from "../utils/backend-api.js";
+import {
+  fetchForwardSingleMsg,
+  fetchSendFiles,
+  fetchSendFileStream,
+  fetchSendMessage,
+  getGroupUsers
+} from "../utils/backend-api.js";
 import InputQuote from "./InputQuote.vue";
 import VirtualScroller from "./utils/VirtualScroller.vue";
 import { pinyin } from "pinyin-pro";
 import FilesConfirm from "./utils/FilesConfirm.vue";
+import FilesUploadTasksViewer from "./utils/FilesUploadTasksViewer.vue";
 import ContactsPicker from "./utils/ContactsPicker.vue";
 import { Emitter } from "../composables/event-bus.js";
+import { nanoid } from "nanoid";
 
 export default defineComponent({
   name: "MessageInputBox",
   components: {
     ContactsPicker,
     FilesConfirm,
+    FilesUploadTasksViewer,
     VirtualScroller,
     InputQuote,
     Tooltip,
@@ -36,6 +45,7 @@ export default defineComponent({
       default: null
     }
   },
+  inject: ['sendAction'],
   data() {
     return {
       lastCaretPosition: null,
@@ -57,6 +67,8 @@ export default defineComponent({
       draggedFiles: [],
       messageIdToForward: undefined,
       messageContentToForward: undefined,
+      filesUploadTasks: [],
+      showFilesUploadTasks: false
     }
   },
   mounted() {
@@ -79,16 +91,22 @@ export default defineComponent({
     Emitter.on('forward-single-msg', this.handleForwardSingleMsg)
   },
   beforeDestroy() {
-    this.$refs.editor.removeEventListener('compositionstart', this.handleCompositionStart)
-    this.$refs.editor.removeEventListener('compositionend', this.handleCompositionEnd)
-    document.removeEventListener('click', this.handleDocumentClick);
-    window.removeEventListener('keydown', this.handleWindowKeyDown);
-    document.removeEventListener('drop', this.handleDocumentDrop);
-    document.removeEventListener('dragover', this.handleDocumentDragover);
-
-    Emitter.off('forward-single-msg')
+    this.handleUnmounted()
+  },
+  beforeUnmount() {
+    this.handleUnmounted()
   },
   methods: {
+    handleUnmounted() {
+      this.$refs.editor?.removeEventListener('compositionstart', this.handleCompositionStart)
+      this.$refs.editor?.removeEventListener('compositionend', this.handleCompositionEnd)
+      document.removeEventListener('click', this.handleDocumentClick);
+      window.removeEventListener('keydown', this.handleWindowKeyDown);
+      document.removeEventListener('drop', this.handleDocumentDrop);
+      document.removeEventListener('dragover', this.handleDocumentDragover);
+
+      Emitter.off('forward-single-msg')
+    },
     // 用户在编辑后调用此方法记录状态
     recordHistory() {
       // 获取当前 innerHTML
@@ -300,10 +318,62 @@ export default defineComponent({
       }
     },
 
-    async handleFilesConfirm() {
+    handleFilesConfirm() {
       const files = toRaw(this.draggedFiles)
       this.draggedFiles = []
-      await fetchSendFiles(toRaw(this.activeContact), files)
+      const maxSize = 20 * 1024 * 1024; // 20MB
+      const minFiles = files.filter(f => f.size <= maxSize);
+      const bigFiles = files.filter(f => !minFiles.includes(f))
+      const contact = toRaw(this.activeContact)
+      const handleResult = task => {
+        return result => {
+          if (result?.status === 'ok') {
+            task.completed = true
+          }
+        }
+      }
+      for (const file of minFiles) {
+        const task_id = nanoid()
+        const controller = new AbortController();
+        this.filesUploadTasks.push({
+          contact,
+          controller,
+          file,
+          task_id,
+          completed: false,
+          cancelled: false
+        })
+        const task = this.filesUploadTasks.find(t => t.task_id === task_id)
+        controller.signal.onabort = () => {
+          task.cancelled = true
+        }
+        fetchSendFiles(contact, file, controller).then(handleResult(task))
+      }
+      for (const file of bigFiles) {
+        const task_id = nanoid()
+        const controller = new AbortController()
+        this.filesUploadTasks.push({
+          task_id,
+          contact,
+          controller,
+          file,
+          chunked: true,
+          sendAction: this.sendAction,
+          start_timestamp: undefined,
+          chunk_size: undefined,
+          total_chunks: undefined,
+          chunk_index: undefined,
+          completed: false,
+          cancelled: false,
+          is_calc_hash: true
+        })
+        // 获取 Proxy 对象
+        const task = this.filesUploadTasks.find(t => t.task_id === task_id)
+        controller.signal.onabort = () => {
+          task.cancelled = true
+        }
+        fetchSendFileStream(task).then(handleResult(task))
+      }
     },
 
     async handleFilesConfirmCancel() {
@@ -967,7 +1037,7 @@ export default defineComponent({
       }
     },
 
-    async handleMessageInputSelectImage() {
+    async handleMessageInputSelectImages() {
       try {
         // 检查浏览器是否支持 File System Access API
         if (!('showOpenFilePicker' in window)) {
@@ -997,7 +1067,6 @@ export default defineComponent({
           // 获取文件对象
           const file = await fileHandle.getFile();
           await this.insertImageAtCursor(file);
-
         }
       } catch (error) {
         // 用户可能取消了选择，不需要处理
@@ -1509,6 +1578,53 @@ export default defineComponent({
     handleContactsPickerCancel() {
       this.messageContentToForward = this.messageIdToForward = undefined
     },
+
+    async handleMessageInputSelectFiles() {
+      try {
+        // 检查浏览器是否支持 File System Access API
+        if (!('showOpenFilePicker' in window)) {
+          alert('您的浏览器不支持 File System Access API，请使用最新版 Chrome/Edge 浏览器');
+          return;
+        }
+
+        // 文件类型选项 - 接受所有类型
+        const options = {
+          types: [
+            {
+              description: 'Files',
+            }
+          ],
+          multiple: true, // 允许多选
+          excludeAcceptAllOption: false // 显示"所有文件"选项
+        };
+
+        // 打开文件选择器
+        const fileHandles = await window.showOpenFilePicker(options);
+        const files = []
+
+        for (const fileHandle of fileHandles) {
+          files.push(await fileHandle.getFile())
+        }
+
+        const filteredFiles = files.filter(file => file.size)
+        if (filteredFiles.length !== files.length) {
+          showToast('info', '已自动过滤空文件/文件夹')
+        }
+        this.draggedFiles = filteredFiles
+      } catch (error) {
+        // 用户可能取消了选择，不需要处理
+        if (error.name !== 'AbortError') {
+          console.error('选择文件时出错:', error);
+        }
+      }
+    },
+
+    handleFilesUploadTasksViewer() {
+      this.showFilesUploadTasks = !this.showFilesUploadTasks
+    },
+    handleFilesUploadTasksViewerClose() {
+      this.showFilesUploadTasks = false
+    }
   },
   computed: {
     emojiGroupList() {
@@ -1582,7 +1698,15 @@ export default defineComponent({
 
       // 合并结果，按优先级排序
       return [...directMatches, ...pinyinMatches, ...qqMatches];
+    },
+
+    currentFilesUploadTasks() {
+      return this.filesUploadTasks.filter(task => {
+        const { type, contact_id } = task.contact;
+        return type === this.activeContact.type && contact_id === this.activeContact.contact_id;
+      });
     }
+
   },
   watch: {
     filteredAtGroupUsers() {
@@ -1594,6 +1718,11 @@ export default defineComponent({
 
 <template>
   <div class="message-input-box">
+    <FilesUploadTasksViewer
+      v-if="showFilesUploadTasks && currentFilesUploadTasks?.length"
+      :tasks="currentFilesUploadTasks"
+      :on-close="handleFilesUploadTasksViewerClose"
+    />
     <FilesConfirm
       v-if="this.draggedFiles.length"
       :files="this.draggedFiles"
@@ -1639,117 +1768,138 @@ export default defineComponent({
       :minHeight="140"
     >
       <div class="message-input-controls">
-        <color-svg
-          src="/QQ/icons/expression_24.svg"
-          class="message-input-ctrl-icon"
-          ref="expressionControl"
-        ></color-svg>
-        <Tooltip
-          v-if="refReady"
-          :target="$refs.expressionControl.svg"
-          content="表情"
-        />
-        <Tooltip
-          v-if="refReady"
-          :target="$refs.expressionControl.svg"
-          :distance-from-target="6"
-          z-index="1001"
-          :always-exists="true"
-          min-left="(window.innerWidth <= 570) ? 5px : (var(--sidebar-width) + 5px)"
-          trigger="toggle"
-        >
-          <template #content>
-            <div class="message-input-expression-box tooltip-style">
-              <SimpleBar class="message-input-expression-scroller" data-simplebar data-simplebar-auto-hide="false">
-                <template v-for="(category, i) in emojiGroupList" :key="i">
-                  <p class="message-input-expression-category-title">
-                    {{ category.title }}
-                  </p>
-                  <div class="message-input-expression-category">
-                    <Tooltip
-                      :distance-from-target="0"
-                      use-target-slot
-                      v-for="(emoji, index) in category.list"
-                      :key="index"
-                      z-index="1002"
-                    >
-                      <template #target>
-                        <div
-                          class="message-input-expression-emoji-box"
-                          @click="this.handleExpressionInput"
-                          :data-emoji="emoji"
-                        >
-                          <img
-                            :src="getPngEmojiUrl(emoji, String(emoji) === '367' ? 0 : null)"
-                            alt=""
-                            :data-emoji-animation="getApngEmojiUrl(emoji) ? 'static' : ''"
-                          />
+        <div class="message-input-controls-left">
+          <color-svg
+            src="/QQ/icons/expression_24.svg"
+            class="message-input-ctrl-icon"
+            ref="expressionControl"
+          ></color-svg>
+          <Tooltip
+            v-if="refReady"
+            :target="$refs.expressionControl.svg"
+            content="表情"
+          />
+          <Tooltip
+            v-if="refReady"
+            :target="$refs.expressionControl.svg"
+            :distance-from-target="6"
+            z-index="1001"
+            :always-exists="true"
+            min-left="(window.innerWidth <= 570) ? 5px : (var(--sidebar-width) + 5px)"
+            trigger="toggle"
+          >
+            <template #content>
+              <div class="message-input-expression-box tooltip-style">
+                <SimpleBar class="message-input-expression-scroller" data-simplebar data-simplebar-auto-hide="false">
+                  <template v-for="(category, i) in emojiGroupList" :key="i">
+                    <p class="message-input-expression-category-title">
+                      {{ category.title }}
+                    </p>
+                    <div class="message-input-expression-category">
+                      <Tooltip
+                        :distance-from-target="0"
+                        use-target-slot
+                        v-for="(emoji, index) in category.list"
+                        :key="index"
+                        z-index="1002"
+                      >
+                        <template #target>
+                          <div
+                            class="message-input-expression-emoji-box"
+                            @click="this.handleExpressionInput"
+                            :data-emoji="emoji"
+                          >
+                            <img
+                              :src="getPngEmojiUrl(emoji, String(emoji) === '367' ? 0 : null)"
+                              alt=""
+                              :data-emoji-animation="getApngEmojiUrl(emoji) ? 'static' : ''"
+                            />
 
-                          <img
-                            v-if="getApngEmojiUrl(emoji)"
-                            :src="getApngEmojiUrl(emoji)"
-                            alt=""
-                            data-emoji-animation="animation"
-                          />
-                        </div>
-                      </template>
-                      <template #content>
-                        <div class="tooltip-style message-input-expression-emoji-tooltip"
-                             v-if="emojiDescribes[emoji]">
-                          {{ emojiDescribes[emoji] }}
-                        </div>
-                      </template>
-                    </Tooltip>
-                  </div>
-                </template>
-              </SimpleBar>
-            </div>
-          </template>
-        </Tooltip>
+                            <img
+                              v-if="getApngEmojiUrl(emoji)"
+                              :src="getApngEmojiUrl(emoji)"
+                              alt=""
+                              data-emoji-animation="animation"
+                            />
+                          </div>
+                        </template>
+                        <template #content>
+                          <div class="tooltip-style message-input-expression-emoji-tooltip"
+                               v-if="emojiDescribes[emoji]">
+                            {{ emojiDescribes[emoji] }}
+                          </div>
+                        </template>
+                      </Tooltip>
+                    </div>
+                  </template>
+                </SimpleBar>
+              </div>
+            </template>
+          </Tooltip>
 
-        <color-svg
-          src="/QQ/icons/folder_24.svg"
-          class="message-input-ctrl-icon"
-          ref="folderControl"
-        ></color-svg>
-        <Tooltip
-          v-if="refReady"
-          :target="$refs.folderControl.svg"
-          content="文件"
-        />
+          <color-svg
+            src="/QQ/icons/folder_24.svg"
+            class="message-input-ctrl-icon"
+            ref="folderControl"
+            @click="handleMessageInputSelectFiles"
+          ></color-svg>
+          <Tooltip
+            v-if="refReady"
+            :target="$refs.folderControl.svg"
+            content="文件"
+          />
 
-        <color-svg
-          src="/QQ/icons/image_24.svg"
-          class="message-input-ctrl-icon"
-          ref="imageControl"
-          @click="handleMessageInputSelectImage"
-        ></color-svg>
-        <Tooltip
-          v-if="refReady"
-          :target="$refs.imageControl.svg"
-          content="图片"
-        />
+          <color-svg
+            src="/QQ/icons/image_24.svg"
+            class="message-input-ctrl-icon"
+            ref="imageControl"
+            @click="handleMessageInputSelectImages"
+          ></color-svg>
+          <Tooltip
+            v-if="refReady"
+            :target="$refs.imageControl.svg"
+            content="图片"
+          />
 
 
-        <Tooltip
-          v-if="activeContact?.type === 'private' && false"
-          content="窗口抖动"
-          use-target-slot
-        >
-          <template #target>
-            <color-svg
-              src="/QQ/icons/shake_24.svg"
-              class="message-input-ctrl-icon"
-              ref="shakeControl"
-              @click="handleMessageInputShake"
-            ></color-svg>
-          </template>
-        </Tooltip>
+          <Tooltip
+            v-if="activeContact?.type === 'private' && false"
+            content="窗口抖动"
+            use-target-slot
+          >
+            <template #target>
+              <color-svg
+                src="/QQ/icons/shake_24.svg"
+                class="message-input-ctrl-icon"
+                ref="shakeControl"
+                @click="handleMessageInputShake"
+              ></color-svg>
+            </template>
+          </Tooltip>
+        </div>
+
+
+        <div class="message-input-controls-right">
+          <Tooltip
+            v-if="currentFilesUploadTasks?.length"
+            content="文件上传列表"
+            use-target-slot
+          >
+            <template #target>
+              <color-svg
+                src="/QQ/icons/files_24.svg"
+                class="message-input-ctrl-icon"
+                ref="filesUploadControl"
+                @click="handleFilesUploadTasksViewer"
+              ></color-svg>
+            </template>
+          </Tooltip>
+        </div>
       </div>
 
       <SimpleBar class="message-input-scroller" data-simplebar data-simplebar-auto-hide="false">
         <InputQuote :msg="quotedMessage" v-if="quotedMessage"
-                    @cancel-quote-message="this.quotedMessage=null" ref="inputQuote"></InputQuote>
+                    @cancel-quote-message="quotedMessage=null" ref="inputQuote"></InputQuote>
         <div
           ref="editor"
           contenteditable
@@ -1792,6 +1942,7 @@ export default defineComponent({
   display: flex;
   padding: 6px 0;
   margin-bottom: 5px;
+  justify-content: space-between;
 }
 
 .message-input-ctrl-icon {
@@ -1800,6 +1951,10 @@ export default defineComponent({
   display: inline-block;
   margin: 0 0 0 15px;
   background-color: black;
+}
+
+.message-input-controls-right .message-input-ctrl-icon {
+  margin: 0 15px 0 0;
 }
 
 .message-input-ctrl-icon:hover {

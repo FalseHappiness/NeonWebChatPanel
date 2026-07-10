@@ -1,19 +1,27 @@
 // 获取显示名称的函数
 import axios from "axios";
-import { ref, toRaw } from "vue";
+import { toRaw } from "vue";
 import { useGlobalStore } from "../store/global.js";
 import { showToast } from "./toast.js";
+import { createSHA256 } from 'hash-wasm';
+import { nanoid } from 'nanoid';
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL
 
-const fetchAPI = async (endpoint, params = {}, method = 'POST', data = null) => {
+const fetchAPI = async (endpoint, params = {}, method = 'POST', data = null, signal = null) => {
   try {
+    if (signal instanceof AbortController) {
+      signal = signal.signal
+    }
     const config = {
       method: method.toLowerCase(), // 确保方法小写
       url: `${apiBaseUrl}/api/${endpoint}`,
       params: method.toUpperCase() === 'GET' ? params : (data === null ? {} : params),
       data: method.toUpperCase() === 'POST' ? data || params : {} // POST请求使用data
     };
+    if (signal instanceof AbortSignal) {
+      config['signal'] = signal
+    }
 
     const response = await axios(config);
     return response.data;
@@ -23,6 +31,15 @@ const fetchAPI = async (endpoint, params = {}, method = 'POST', data = null) => 
     throw new Error(`${method} API ${endpoint} error`);
   }
 };
+
+const fetchOptionsAPI = (endpoint, options) => {
+  if (options instanceof Object) {
+    if (options.controller instanceof AbortController) {
+      options.signal = options.controller.signal
+    }
+    return fetchAPI(endpoint, options.params, options.method, options.data, options.signal)
+  }
+}
 
 const fetchDataInfo = async (endpoint, params) => {
   const response = await fetchAPI(endpoint, params)
@@ -99,10 +116,10 @@ const fetchForwardMessage = async (id) => {
   return (await fetchDataInfo('get_forward_msg', { message_id: id })).messages
 }
 
-const fetchSendMessage = async (contact, message) => {
+const fetchSendMessage = async (contact, message, signal) => {
   const data = { message }
   data[contact.type === 'group' ? "group_id" : "user_id"] = contact.contact_id
-  return await fetchAPI('send_message', data)
+  return await fetchOptionsAPI('send_message', { data, signal })
 }
 
 const fetchEssenceMessages = async (group_id, only_real_seq) => {
@@ -126,8 +143,11 @@ function fileToBase64(file) {
   });
 }
 
-const fetchSendFiles = async (contact, files) => {
+const fetchSendFiles = async (contact, files, signal) => {
   const message = [];
+  if (!Array.isArray(files)) {
+    files = [files]
+  }
   for (const file of files) {
     try {
       const base64 = await fileToBase64(file);
@@ -140,13 +160,188 @@ const fetchSendFiles = async (contact, files) => {
       });
     } catch (error) {
       console.error(`文件 ${file.name} 转换 Base64 失败:`, error);
-      showToast('error', `文件 ${file.name} 发送失败:`)
+      showToast('error', `文件 ${file.name} 发送失败`)
     }
   }
   if (message?.length) {
-    await fetchSendMessage(contact, message)
+    if (signal?.aborted || signal?.signal?.aborted) {
+      return
+    }
+    return await fetchSendMessage(contact, message, signal)
   }
 }
+
+/**
+ * 分片计算文件SHA256，兼容http不安全上下文
+ * @param file File对象
+ * @param chunkSize 分片大小 默认2MB
+ * @param onProgress 进度回调 (0~1)
+ * @returns sha256 十六进制字符串
+ */
+export async function calcFileSha256(file, chunkSize = 2 * 1024 * 1024, onProgress) {
+  // 创建独立sha256实例
+  const hasher = await createSHA256()
+  hasher.init()
+
+  const totalSize = file.size
+  let offset = 0
+
+  while (offset < totalSize) {
+    // 截取文件分片
+    const slice = file.slice(offset, offset + chunkSize)
+    const buf = await slice.arrayBuffer()
+    const uint8 = new Uint8Array(buf)
+
+    // 流式更新哈希
+    hasher.update(uint8)
+
+    offset += buf.byteLength
+    // 进度回调
+    if (onProgress) {
+      onProgress(offset / totalSize)
+    }
+  }
+
+  // 输出十六进制哈希
+  return hasher.digest('hex')
+}
+
+/**
+ * 通过 sendAction 分块上传大文件（每块 64KB）
+ * 参考 test_upload_stream.py 的 upload_file_stream_batch 实现
+ *
+ * @param {object} task - 上传任务
+ * @param {object} task.contact - 联系人信息 { contact_id, type }
+ * @param {File} task.file - 要上传的文件对象
+ * @param {AbortController} task.controller - 中止控制器
+ * @param {Function} task.sendAction - 通过 WebSocket 发送 OneBot action 的函数
+ * @param {number} task.start_timestamp
+ * @param {number} task.chunk_size
+ * @param {number} task.chunk_index
+ * @param {number} task.total_chunks
+ * @param {boolean} task.is_calc_hash
+ * @returns {Promise<object>} 上传完成后的消息响应
+ */
+const fetchSendFileStream = async (task) => {
+  const { contact, file, controller, sendAction } = task
+  const CHUNK_SIZE = 64 * 1024; // 64KB
+  const streamId = nanoid();
+  const fileName = file.name;
+  const sha256 = await calcFileSha256(file);
+  const startTimestamp = Date.now();
+  const uploadName = `${fileName}-${sha256}`;
+
+  // console.log(`[fetchSendFileStream] 开始上传文件: ${fileName}`);
+  // console.log(`[fetchSendFileStream] 文件大小: ${file.size} 字节`);
+  // console.log(`[fetchSendFileStream] 分块大小: ${CHUNK_SIZE} 字节 (64KB)`);
+  // console.log(`[fetchSendFileStream] 流ID: ${streamId}`);
+
+  task.start_timestamp = startTimestamp
+  task.chunk_size = CHUNK_SIZE
+  task.is_calc_hash = false
+
+  // 分片懒读取工具：只读取当前需要的片段，不加载完整文件
+  const readSingleChunk = async (start, end) => {
+    const blob = file.slice(start, end);
+    return await blob.arrayBuffer();
+  };
+
+  try {
+    const totalSize = file.size;
+    const totalChunks = Math.ceil(totalSize / CHUNK_SIZE);
+    task.total_chunks = totalChunks
+
+    console.log(`[fetchSendFileStream] 文件 ${fileName} 读取完成, 总块数: ${totalChunks}, SHA256: ${sha256}`);
+
+    for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+      // 检查是否被中止
+      if (controller?.signal?.aborted || controller?.aborted) {
+        throw new Error(`${fileName} 上传已取消`);
+      }
+      task.chunk_index = chunkIndex
+
+      // 提取当前块数据（按需切片读取，不再一次性加载全部buffer）
+      const start = chunkIndex * CHUNK_SIZE;
+      const end = Math.min(start + CHUNK_SIZE, totalSize);
+      const chunkData = await readSingleChunk(start, end);
+
+      // 将块数据编码为 base64
+      const chunkBytes = new Uint8Array(chunkData);
+      let binary = '';
+      for (let i = 0; i < chunkBytes.length; i++) {
+        binary += String.fromCharCode(chunkBytes[i]);
+      }
+      const chunkBase64 = btoa(binary);
+
+      // 构建 upload_file_stream 参数
+      const params = {
+        stream_id: streamId,
+        chunk_data: chunkBase64,
+        chunk_index: chunkIndex,
+        total_chunks: totalChunks,
+        file_size: totalSize,
+        filename: uploadName,
+        file_retention: 3 * 60 * 1000, // ms = 3 min
+        expected_sha256: sha256
+      };
+
+      // console.log(`[fetchSendFileStream] 发送分片 ${chunkIndex + 1}/${totalChunks} (${chunkBytes.length} 字节, 已耗时 ${((Date.now() - startTimestamp) / 1000).toFixed(1)}s)`);
+
+      // 通过 sendAction 发送分片
+      const response = await sendAction('upload_file_stream', params);
+
+      // console.log(`[fetchSendFileStream] 分片 ${chunkIndex + 1}/${totalChunks} 响应:`, response);
+
+      if (response?.status !== 'chunk_received') {
+        throw new Error(`上传分片 ${chunkIndex} 失败: ${JSON.stringify(response)}`);
+      }
+    }
+
+    // 所有分片发送完成，发送完成信号
+    console.log(`[fetchSendFileStream] ${fileName} 所有分片发送完成, 请求文件合并...`);
+
+    const completeParams = {
+      stream_id: streamId,
+      is_complete: true,
+      total_chunks: totalChunks,
+      file_size: totalSize,
+      filename: uploadName,
+      start_timestamp: startTimestamp
+    };
+
+    const completeResponse = await sendAction('upload_file_stream', completeParams);
+
+    // console.log(`[fetchSendFileStream] 合并响应:`, completeResponse);
+
+    const result = completeResponse || {};
+
+    if (result.status === 'file_complete') {
+      // const elapsed = ((Date.now() - startTimestamp) / 1000).toFixed(1);
+      // console.log(`[fetchSendFileStream] ✅ 文件上传成功!`);
+      // console.log(`[fetchSendFileStream]    - 文件路径: ${result.file_path}`);
+      // console.log(`[fetchSendFileStream]    - 文件大小: ${result.file_size} 字节`);
+      // console.log(`[fetchSendFileStream]    - SHA256: ${result.sha256}`);
+      // console.log(`[fetchSendFileStream]    - 总计耗时: ${elapsed}s`);
+
+      // 现在发送文件到聊天
+      const message = [{
+        type: 'file',
+        data: {
+          file: result.file_path,
+          name: fileName
+        }
+      }];
+
+      return await fetchSendMessage(contact, message, controller)
+    } else {
+      throw new Error(`文件状态异常: ${JSON.stringify(result)}`);
+    }
+
+  } catch (error) {
+    console.error(`[fetchSendFileStream] ❌ 上传失败:`, error);
+    throw error;
+  }
+};
 
 const fetchCategoricalFriends = async () => {
   return fetchDataInfo('get_friends_with_category')
@@ -513,5 +708,6 @@ export {
   fetchSetGroupRemark,
   fetchSetGroupMemberRemark,
   setGroupNameCache,
-  setGroupUserNameCache
+  setGroupUserNameCache,
+  fetchSendFileStream
 }

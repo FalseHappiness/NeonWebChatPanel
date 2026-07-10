@@ -1,5 +1,6 @@
 import { ref, onUnmounted, watch } from 'vue'
 import axios from 'axios'
+import { nanoid } from "nanoid";
 
 export function useWebSocket(url, { onMessage, onNewContact, onNotice }) {
   const socket = ref(null)
@@ -11,8 +12,26 @@ export function useWebSocket(url, { onMessage, onNewContact, onNotice }) {
   const shouldSync = ref(false) // 是否需要同步消息
   const apiBaseUrl = import.meta.env.VITE_API_BASE_URL
 
+  // 存储正在等待响应的 send_action 回调
+  const pendingActions = new Map()
+
   const onReceiveMessage = (message, echo_msg = false) => {
     try {
+      // 检查是否是 send_action 的响应
+      if (message.type === 'send_action_response') {
+        const echo = message.echo
+        if (echo && pendingActions.has(echo)) {
+          const { resolve, reject } = pendingActions.get(echo)
+          pendingActions.delete(echo)
+          if (message.status === 'ok') {
+            resolve(message.data)
+          } else {
+            reject(new Error(message.message || 'Action failed'))
+          }
+        }
+        return
+      }
+
       if (message.id > lastMessageId.value) {
         lastMessageId.value = message.id
       }
@@ -24,6 +43,44 @@ export function useWebSocket(url, { onMessage, onNewContact, onNotice }) {
     } catch (error) {
       console.error('Error parsing WebSocket message:', error)
     }
+  }
+
+  /**
+   * 通过 WebSocket 发送 action 请求并等待响应
+   * @param {string} action - OneBot action 名称
+   * @param {object} params - action 参数
+   * @param {number} timeout - 超时时间(毫秒)
+   * @returns {Promise<any>} action 响应数据
+   */
+  const sendAction = (action, params = {}, timeout = 60000) => {
+    return new Promise((resolve, reject) => {
+      if (!socket.value || socket.value.readyState !== WebSocket.OPEN) {
+        reject(new Error('WebSocket is not connected'))
+        return
+      }
+
+      const echo = nanoid()
+
+      pendingActions.set(echo, { resolve, reject })
+
+      // 超时处理
+      const timer = setTimeout(() => {
+        if (pendingActions.has(echo)) {
+          pendingActions.delete(echo)
+          reject(new Error(`Action "${action}" timed out after ${timeout}ms`))
+        }
+      }, timeout)
+
+      // 发送请求
+      socket.value.send(JSON.stringify({
+        type: 'send_action',
+        action: action,
+        params: params,
+        echo: echo
+      }))
+
+      // console.log(`[sendAction] 发送 action: ${action}`, params)
+    })
   }
 
   // 同步新消息
@@ -130,6 +187,12 @@ export function useWebSocket(url, { onMessage, onNewContact, onNotice }) {
       // 标记需要同步
       shouldSync.value = true
 
+      // 拒绝所有 pending 的 action
+      for (const [echo, { reject }] of pendingActions) {
+        reject(new Error('WebSocket disconnected'))
+      }
+      pendingActions.clear()
+
       // 无限重连
       if (reconnectAttempts.value < maxReconnectAttempts) {
         reconnectAttempts.value++
@@ -160,6 +223,7 @@ export function useWebSocket(url, { onMessage, onNewContact, onNotice }) {
     socket,
     isConnected,
     lastMessageId,
-    syncMessages
+    syncMessages,
+    sendAction
   }
 }

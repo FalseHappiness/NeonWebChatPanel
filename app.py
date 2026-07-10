@@ -54,8 +54,8 @@ app.add_middleware(
 # templates = Jinja2Templates(directory="templates")
 
 # 初始化 WebSocket 管理器
-frontend_manager = FrontendConnectionManager()
 onebot_manager = OneBotConnectionManager(config.ONEBOT_WS_TOKEN)
+frontend_manager = FrontendConnectionManager(onebot_manager)
 
 
 @app.websocket("/ws/{path:path}")
@@ -998,7 +998,7 @@ app.mount("/", StaticFiles(directory="viewer/dist", html=True), name="frontend")
 
 # History路由兜底
 @app.get("/{path:path}")
-async def catch_all(path):
+async def catch_all():
     return FileResponse("dist/index.html")
 
 

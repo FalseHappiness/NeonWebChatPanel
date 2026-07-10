@@ -25,7 +25,8 @@ const {
   isConnected,
   lastMessageId,
   syncMessages,
-  socket
+  socket,
+  sendAction
 } = useWebSocket(wsUri, {
   onMessage: (message) => {
     // 检查消息是否属于当前活跃的联系人
@@ -135,6 +136,9 @@ const {
     }
   }
 })
+
+// 提供 sendAction 给子组件
+provide('sendAction', sendAction)
 
 // 监听连接状态变化
 watch(isConnected, (connected) => {
