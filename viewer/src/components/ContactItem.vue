@@ -220,12 +220,13 @@ onMounted(async () => {
   /*border-bottom: 1px solid #eee;*/
   display: flex;
   align-items: center;
-  height: 68px;
+  height: 60px;
+  margin: 5px 4px;
+  border-radius: 6px;
 }
 
 .contact-item:hover {
-  /*background-color: #f8f9fa;*/
-  background-color: #f5f5f5;
+  background-color: #EBEBEB;
 }
 
 .contact-item:active {
@@ -233,13 +234,11 @@ onMounted(async () => {
 }
 
 .contact-item.active {
-  /*background-color: #e9ecef;*/
-  color: white !important;
-  background-color: #0099ff !important;
+  background-color: #E2E2E2 !important;
 }
 
-.contact-item.active .text-muted {
-  color: white !important;
+.contact-item.active:active {
+  background-color: #D7D7D7 !important;
 }
 
 .contact-logo {
@@ -253,7 +252,7 @@ onMounted(async () => {
 .contact-info {
   flex: 1;
   line-height: 18px;
-  max-width: calc(100% - 60px);
+  /*max-width: calc(100% - 60px);*/
   overflow: hidden;
   text-overflow: ellipsis;
 }

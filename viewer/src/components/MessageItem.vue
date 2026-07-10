@@ -567,17 +567,12 @@ onUnmounted(() => {
 }
 
 .message-in .message {
-  /*align-self: flex-start;*/
-  /*background-color: #f1f1f1;*/
   background-color: white;
   margin-left: 8px;
 }
 
 .message-out .message {
-  /*align-self: flex-end;*/
-  /*background-color: #007bff;*/
-  background-color: #0099ff;
-  color: white;
+  background-color: #CCEBFF;
   margin-right: 8px;
 }
 
@@ -694,7 +689,7 @@ onUnmounted(() => {
 }
 
 .darkness-effect {
-  filter: brightness(85%);
+  filter: brightness(90%);
 }
 
 .show-message-time .message-send-time {

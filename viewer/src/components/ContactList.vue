@@ -49,7 +49,7 @@ const sidebarResize = ({ width }) => {
       <h4>联系人</h4>
     </div>
     <div v-if="loading" style="text-align: center">加载中...</div>
-    <VirtualScroller :item-height="68"
+    <VirtualScroller :item-height="60"
                      :items="sortedContacts"
                      v-else
                      class="contacts-list"
@@ -74,7 +74,7 @@ const sidebarResize = ({ width }) => {
 
 .sidebar {
   width: 250px;
-  background: white;
+  background: #F5F5F5;
   height: 100% !important;
   overflow: hidden;
   border-right: 1px solid #dee2e6;

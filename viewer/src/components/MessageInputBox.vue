@@ -21,10 +21,12 @@ import FilesUploadTasksViewer from "./utils/FilesUploadTasksViewer.vue";
 import ContactsPicker from "./utils/ContactsPicker.vue";
 import { Emitter } from "../composables/event-bus.js";
 import { nanoid } from "nanoid";
+import CustomScrollBar from "./utils/CustomScrollBar.vue";
 
 export default defineComponent({
   name: "MessageInputBox",
   components: {
+    CustomScrollBar,
     ContactsPicker,
     FilesConfirm,
     FilesUploadTasksViewer,
@@ -1790,7 +1792,7 @@ export default defineComponent({
           >
             <template #content>
               <div class="message-input-expression-box tooltip-style">
-                <SimpleBar class="message-input-expression-scroller" data-simplebar data-simplebar-auto-hide="false">
+                <CustomScrollBar class="message-input-expression-scroller">
                   <template v-for="(category, i) in emojiGroupList" :key="i">
                     <p class="message-input-expression-category-title">
                       {{ category.title }}
@@ -1832,7 +1834,7 @@ export default defineComponent({
                       </Tooltip>
                     </div>
                   </template>
-                </SimpleBar>
+                </CustomScrollBar>
               </div>
             </template>
           </Tooltip>
@@ -1897,7 +1899,7 @@ export default defineComponent({
         </div>
       </div>
 
-      <SimpleBar class="message-input-scroller" data-simplebar data-simplebar-auto-hide="false">
+      <CustomScrollBar class="message-input-scroller">
         <InputQuote :msg="quotedMessage" v-if="quotedMessage"
                     @cancel-quote-message="quotedMessage=null" ref="inputQuote"></InputQuote>
         <div
@@ -1913,7 +1915,7 @@ export default defineComponent({
           @keydown="handleKeyDown"
           @input="handleInput"
         ></div>
-      </SimpleBar>
+      </CustomScrollBar>
 
       <div class="message-input-send-button" @click="handleSendMessage">发送</div>
     </vue-resizable>
@@ -2138,22 +2140,8 @@ export default defineComponent({
 </style>
 
 <style>
-.message-input-scroller .resizable-r {
-  width: 8px !important;
-}
-
-.message-input-scroller .simplebar-scrollbar {
-  visibility: hidden;
-  opacity: 0.3;
-}
-
 .message-input-scroller .simplebar-scrollbar:before {
-  width: 7px;
   left: 3px;
-}
-
-.message-input-scroller:hover .simplebar-scrollbar, .message-input-scroller.simplebar-dragging .simplebar-scrollbar {
-  visibility: visible;
 }
 
 .message-input-scroller .simplebar-content-wrapper, .message-input-scroller .simplebar-content {
@@ -2172,32 +2160,4 @@ export default defineComponent({
 .message-input-scroller .simplebar-track.simplebar-vertical {
   right: 5px;
 }
-</style>
-
-<style>
-.message-input-expression-scroller {
-  max-height: 100%;
-}
-
-.message-input-expression-scroller .resizable-r {
-  width: 8px !important;
-}
-
-.message-input-expression-scroller .simplebar-scrollbar {
-  visibility: hidden;
-  opacity: 0.3;
-}
-
-.message-input-expression-scroller .simplebar-scrollbar:before {
-  width: 7px;
-  left: 3px;
-}
-
-.message-input-expression-scroller:hover .simplebar-scrollbar, .message-input-expression-scroller.simplebar-dragging .simplebar-scrollbar {
-  visibility: visible;
-}
-
-/*.message-input-expression-scroller .simplebar-track.simplebar-vertical {
-  right: 5px;
-}*/
 </style>
