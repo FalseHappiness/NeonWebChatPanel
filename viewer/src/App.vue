@@ -8,7 +8,7 @@ import {
   fetchEssenceMessages, fetchLoginInfo,
   fetchMessages, fetchSetGroupRemark,
   getFriendsDisplayName,
-  getGroupUsersDisplayName, setGroupNameCache
+  getGroupUsersDisplayName, setGroupNameCache, wsUri
 } from "./utils/backend-api.js";
 import { showErrorToast, showToast } from "./utils/toast.js";
 import { destroyContextMenu, initContextMenu } from "./utils/context-menu.js";
@@ -17,8 +17,6 @@ const contacts = ref([])
 const loadingContacts = ref(false)
 const activeContact = ref(null)
 const chatArea = ref(null)
-
-const wsUri = import.meta.env.VITE_WS_URI
 
 // 初始化WebSocket
 const {

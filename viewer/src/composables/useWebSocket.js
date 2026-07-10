@@ -1,6 +1,7 @@
 import { ref, onUnmounted, watch } from 'vue'
 import axios from 'axios'
 import { nanoid } from "nanoid";
+import { apiBaseUrl } from "../utils/backend-api.js";
 
 export function useWebSocket(url, { onMessage, onNewContact, onNotice }) {
   const socket = ref(null)
@@ -10,7 +11,6 @@ export function useWebSocket(url, { onMessage, onNewContact, onNotice }) {
   const reconnectInterval = 3000 // 重连间隔
   const isConnected = ref(false)
   const shouldSync = ref(false) // 是否需要同步消息
-  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL
 
   // 存储正在等待响应的 send_action 回调
   const pendingActions = new Map()

@@ -6,7 +6,18 @@ import { showToast } from "./toast.js";
 import { createSHA256 } from 'hash-wasm';
 import { nanoid } from 'nanoid';
 
-const apiBaseUrl = import.meta.env.VITE_API_BASE_URL
+let apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
+let wsUri = import.meta.env.VITE_WS_URI;
+
+if (import.meta.env.PROD) {
+  console.log('当前是生产环境');
+  const { protocol, host } = window.location;
+  // http/https 接口地址
+  apiBaseUrl = `${protocol}//${host}`;
+  // ws/wss 地址：http → ws，https → wss
+  const wsProtocol = protocol === 'https:' ? 'wss:' : 'ws:';
+  wsUri = `${wsProtocol}//${host}/ws/frontend`;
+}
 
 const fetchAPI = async (endpoint, params = {}, method = 'POST', data = null, signal = null) => {
   try {
@@ -709,5 +720,7 @@ export {
   fetchSetGroupMemberRemark,
   setGroupNameCache,
   setGroupUserNameCache,
-  fetchSendFileStream
+  fetchSendFileStream,
+  apiBaseUrl,
+  wsUri
 }
