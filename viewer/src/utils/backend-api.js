@@ -385,6 +385,10 @@ const fetchSetGroupMemberRemark = async (group_id, user_id, card) => {
   return await fetchAPI('set_group_card', { group_id, user_id, card })
 }
 
+const fetchSetLongNick = async (longNick) => {
+  return await fetchAPI('set_self_longnick', { longNick })
+}
+
 const isObject = (variable) => {
   return typeof variable === 'object' && !Array.isArray(variable);
 };
@@ -691,6 +695,15 @@ const getStreamFileDataUrl = file_id => {
   return `${apiBaseUrl}/api/get_stream_file_data?file_id=${encodeURIComponent(file_id)}`
 }
 
+const getGroupLogo = (group_id, size = 100) => {
+  return `https://p.qlogo.cn/gh/${group_id}/${group_id}/${size}`
+}
+
+const getUserLogo = (user_id, size = 100) => {
+  return `https://q1.qlogo.cn/g?b=qq&nk=${user_id}&s=${size}`
+}
+
+
 export {
   fetchDisplayName,
   fetchContacts,
@@ -722,5 +735,9 @@ export {
   setGroupUserNameCache,
   fetchSendFileStream,
   apiBaseUrl,
-  wsUri
+  wsUri,
+  getGroupLogo,
+  getUserLogo,
+  fetchStrangerInfo,
+  fetchSetLongNick
 }

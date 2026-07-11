@@ -8,7 +8,7 @@ import {
   fetchMsg, fetchRecallMessage,
   fetchSendMessage,
   getCacheGroupLevelTitle,
-  getCacheName
+  getCacheName, getUserLogo
 } from "../utils/backend-api.js";
 import { useGlobalStore } from "../store/global.js";
 import GroupLevelTitle from "./GroupLevelTitle.vue";
@@ -429,7 +429,7 @@ onUnmounted(() => {
     <img
       class="message-avatar"
       alt=""
-      :src="`https://q1.qlogo.cn/g?b=qq&nk=${message.user_id}&s=100`"
+      :src="getUserLogo(message.user_id)"
       v-double-click="handleAvatarDoubleClick"
     />
     <div class="message-msg-side">
@@ -484,8 +484,9 @@ onUnmounted(() => {
   direction: ltr;
   text-align: left;
   overflow-wrap: break-word;
-  word-break: break-word;
+  word-break: break-all;
   max-width: 100%;
+  white-space: pre-wrap;
 }
 
 /*
@@ -619,7 +620,7 @@ onUnmounted(() => {
 }
 
 .message-msg-side {
-  max-width: 70%;
+  max-width: calc(100% - 150px);
 }
 
 .message-send-time {

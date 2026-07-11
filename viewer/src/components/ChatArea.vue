@@ -514,9 +514,9 @@ onMounted(initContactInfo)
       </label>
     </div>
 
-    <div v-if="!activeContact" class="d-flex justify-content-center align-items-center h-100">
+    <div v-if="!activeContact" class="display-flex justify-content-center align-items-center height-100">
       <div class="text-center text-muted">
-        <h4>选择联系人以开始聊天</h4>
+        <h2>选择联系人以开始聊天</h2>
       </div>
     </div>
 

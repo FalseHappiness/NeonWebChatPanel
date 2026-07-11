@@ -2,7 +2,7 @@
 <script setup>
 import { computed, ref, onMounted, h, watch } from "vue";
 import { parseMessagePreview, parseNoticePreview } from "../utils/parse-message.js";
-import { fetchDisplayName, getCacheName } from "../utils/backend-api.js";
+import { fetchDisplayName, getCacheName, getGroupLogo, getUserLogo } from "../utils/backend-api.js";
 import { basicContextItem, vCustomMenu } from "../utils/context-menu.js";
 import { copy } from "../utils/clipboard.js";
 import { formatRelativeTime } from "../utils/others.js";
@@ -24,6 +24,9 @@ const displayName = ref('') // 使用ref来管理名称状态
 const isLoading = ref(false) // 加载状态
 const isError = ref(false) // 错误状态
 
+const isGroup = computed(() => {
+  return props.contact.type === 'group'
+})
 
 const handleClick = () => {
   emit('select', props.contact)
@@ -79,7 +82,6 @@ const previewMessage = ref([])
 
 const getPreviewText = async () => {
   try {
-    const isGroup = props.contact.type === 'group';
     let event = props.contact.latest_msg;
     if (typeof event === 'string') event = JSON.parse(event);
     // console.log(props.contact);
@@ -88,11 +90,11 @@ const getPreviewText = async () => {
 
     let display_name = props.contact.name;
     /*
-    if (!isGroup) {
+    if (!isGroup.value) {
       display_name = event.self_id === event.user_id ? '呼' : '应';
     }
      */
-    if (isMessage && isGroup) {
+    if (isMessage && isGroup.value) {
       const id = [event.group_id, event.user_id];
       const type = "group_user";
       const fetchResult = await fetchDisplayName(id, type);
@@ -128,15 +130,15 @@ watch(() => props.contact.latest_msg, async () => {
 const computedPreviewText = computed(() => {
   let children = []
   if (previewMessage.value) {
-    const isGroup = props.contact.type === 'group';
+    const is_group = isGroup.value;
     let event = props.contact.latest_msg;
     if (typeof event === 'string') event = JSON.parse(event);
     const isMessage = ['message_sent', 'message'].includes(event?.post_type)
 
-    if ((isMessage && isGroup && previewSenderName.value) || !isMessage || !isGroup) {
+    if ((isMessage && is_group && previewSenderName.value) || !isMessage || !is_group) {
       children = [
         ...(
-          (isMessage && isGroup) ? [previewSenderName.value, ': '] : []
+          (isMessage && is_group) ? [previewSenderName.value, ': '] : []
         ),
         ...previewMessage.value
       ]
@@ -149,18 +151,15 @@ const computedPreviewText = computed(() => {
   );
 });
 
-
 // 计算显示Logo
 const logoUrl = computed(() => {
-  return props.contact.type === 'group'
-    ? `https://p.qlogo.cn/gh/${props.contact.contact_id}/${props.contact.contact_id}/100`
-    : `https://q1.qlogo.cn/g?b=qq&nk=${props.contact.contact_id}&s=100`
+  return (isGroup.value ? getGroupLogo : getUserLogo)(props.contact.contact_id)
 })
 
 const customContextMenu = () => {
   return [
     basicContextItem(
-      props.contact.type === 'group' ? "复制群号" : "复制 QQ 号",
+      isGroup.value ? "复制群号" : "复制 QQ 号",
       () => {
         copy(props.contact.contact_id)
       },
@@ -194,7 +193,7 @@ onMounted(async () => {
   >
     <img alt="" :src="logoUrl" class="contact-logo">
     <div class="contact-info">
-      <div class="d-flex justify-content-between">
+      <div class="display-flex justify-content-between">
         <span
           @click="handleNameClick"
           class="contact-name overflow-ellipsis"

@@ -1,3 +1,38 @@
+@font-face {
+    font-family: "Color Emoji";
+    src: url("/QQ/fonts/AppleColorEmoji.ttf") format('truetype');
+    unicode-range: U+1F300-1F5FF, U+1F600-1F64F, U+1F680-1F6FF, U+2600-26FF, U+2700-27BF;/*不包含空白符及数字*/
+}
+
+@font-face {
+    font-family: "Color Emoji Fix";
+    src: url("/QQ/fonts/AppleColorEmoji-fix.ttf") format('truetype');
+}
+
+* {
+    outline: none;
+    -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
+}
+
+body, html {
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+}
+
+:root {
+    line-height: 1.5;
+    font-weight: 400;
+
+    color-scheme: light dark;
+    background-color: #242424;
+
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
 * {
     font-family: "Color Emoji", system-ui, "PingFang SC", PingFangSC-Regular, "Microsoft YaHei", "Hiragino Sans GB", "Heiti SC", "WenQuanYi Micro Hei", Arial, Helvetica, sans-serif, "Apple Braille", "Color Emoji Fix"
 }
@@ -24,151 +59,44 @@
     user-drag: none; /* Generic */
 }
 
-.sidebar {
-    width: 250px;
-    background: white;
-    border-right: 1px solid #e9e9e9;
-    height: 100% !important;
+a {
+    font-weight: 500;
+    color: #646cff;
+    text-decoration: inherit;
 }
 
-.sidebar .resizable-r {
-    width: 8px !important;
+a:hover {
+    color: #535bf2;
 }
 
-.sidebar #contactsList .simplebar-scrollbar {
-    visibility: hidden;
-    opacity: 0.3;
-}
-
-.sidebar #contactsList .simplebar-scrollbar:before {
-    width: 7px;
-}
-
-.sidebar:hover #contactsList .simplebar-scrollbar, .sidebar #contactsList.simplebar-dragging .simplebar-scrollbar {
-    visibility: visible;
-}
-
-#sidebarTop {
+body {
     margin: 0;
-    height: 60px
+    min-width: 320px;
+    min-height: 100vh;
 }
 
-#contactsList {
-    padding: 0;
-    /*overflow: auto;*/
-    height: calc(100% - 60px);
-    /*position: absolute;*/
+h1 {
+    font-size: 3.2em;
+    line-height: 1.1;
 }
 
-#contactsList .contactContainer {
-    list-style-type: none;
-    height: 40px;
-    padding: 16px;
-    background-color: white;
-    display: flex;
-    align-items: center;
-    color: black;
+button {
+    border-radius: 8px;
+    border: 1px solid transparent;
+    padding: 0.6em 1.2em;
+    font-size: 1em;
+    font-weight: 500;
+    font-family: inherit;
+    background-color: #1a1a1a;
+    cursor: pointer;
+    transition: border-color 0.25s;
 }
 
-#contactsList .contactContainer.selectedContact {
-    color: white !important;
-    background-color: #0099ff !important;
+button:hover {
+    border-color: #646cff;
 }
 
-#contactsList .contactContainer .avatar {
-    height: 40px;
-    width: 40px;
-    border-radius: 50%;
-}
-
-#contactsList .contactContainer .contactName {
-    text-overflow: ellipsis; /*文本超出显示省略号*/
-    /*white-space: nowrap; !*强制不换行*!*/
-    overflow: hidden; /*超出隐藏*/
-    display: inline-block;
-    margin-left: 10px;
-    font-size: 14px;
-    font-style: normal;
-    font-weight: 400;
-}
-
-#contactsList .contactContainer:hover {
-    background-color: #f5f5f5;
-}
-
-#contactsList .contactContainer:active {
-    background-color: #e0e0e0;
-}
-
-.chat {
-    flex-grow: 1;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    background: #f2f2f2;
-    min-width: 400px;
-}
-
-#topBar {
-    border-bottom: 1px solid #e9e9e9;
-    align-items: center;
-    display: flex;
-    justify-content: space-between;
-    position: relative;
-    padding: 31px 20px 14px;
-    user-select: none;
-}
-
-.messages {
-    flex-grow: 1;
-    overflow-y: auto;
-    margin-bottom: 10px;
-}
-
-.message {
-    background: white;
-    margin-bottom: 5px;
-    padding: 5px;
-    border-radius: 5px;
-}
-
-#window-controls {
-    position: fixed;
-    right: 0;
-    top: 0;
-    height: 28px;
-    width: 96px;
-}
-
-#window-controls .window-control-btn {
-    width: 32px;
-    height: 28px;
-    display: inline-block;
-    text-align: center;
-}
-
-#window-controls .window-control-btn:hover {
-    background-color: #0000000A;
-}
-
-#window-controls .window-control-btn:active {
-    background-color: #0000001F;
-}
-
-#window-controls #window-control-close:hover, #window-controls #window-control-close:active {
-    background-color: #C42B1C;
-}
-
-#window-controls #window-control-close:hover img {
-    filter: invert(1); /* 颠倒黑色为白色 */
-}
-
-#window-controls #window-control-close:active img {
-    filter: invert(0.8);
-}
-
-#window-controls .window-control-btn img {
-    width: 16px;
-    height: 16px;
-    vertical-align: bottom;
+button:focus,
+button:focus-visible {
+    outline: 4px auto -webkit-focus-ring-color;
 }

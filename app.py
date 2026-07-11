@@ -992,6 +992,15 @@ async def upload_private_file(params: dict = Depends(get_request_params)):
     )
 
 
+@app.api_route("/api/set_self_longnick", methods=["GET", "POST"])
+async def set_self_longnick(params: dict = Depends(get_request_params)):
+    return await make_api_request(
+        endpoint="set_self_longnick",
+        request_params=['longNick'],
+        original_params=params
+    )
+
+
 # 托管dist静态文件
 app.mount("/", StaticFiles(directory="viewer/dist", html=True), name="frontend")
 

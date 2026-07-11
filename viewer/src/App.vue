@@ -6,12 +6,13 @@ import ChatArea from './components/ChatArea.vue'
 import {
   fetchContacts,
   fetchEssenceMessages, fetchLoginInfo,
-  fetchMessages, fetchSetGroupRemark,
+  fetchMessages, fetchSetGroupRemark, fetchSetLongNick, fetchStrangerInfo,
   getFriendsDisplayName,
   getGroupUsersDisplayName, setGroupNameCache, wsUri
 } from "./utils/backend-api.js";
 import { showErrorToast, showToast } from "./utils/toast.js";
 import { destroyContextMenu, initContextMenu } from "./utils/context-menu.js";
+import "./App.css"
 
 const contacts = ref([])
 const loadingContacts = ref(false)
@@ -284,10 +285,11 @@ const getMessages = async (
 // 选择联系人
 const selectContact = (contact) => {
   if (chatArea.value?.$refs?.scroller?.initializing) return
-  // 如果已经是当前联系人，则不执行任何操作
+  // 如果已经是当前联系人
   if (activeContact.value?.contact_id === contact?.contact_id &&
     activeContact.value?.type === contact?.type) {
-    return
+    activeContact.value = null;
+    return;
   }
   activeContact.value = contact
 }
@@ -317,13 +319,27 @@ const changeGroupContactRemark = async (contact_id, remark) => {
   }
 }
 
+const changeSelfLongNick = async longNick => {
+  const result = await fetchSetLongNick(longNick)
+  if (result?.status === 'ok') {
+    selfInfo.value.long_nick = selfInfo.value.longNick = longNick;
+  } else {
+    console.log("Change self long nick error: ", longNick, result)
+    showErrorToast(`改变个性签名为 ${longNick} 失败`)
+  }
+
+}
+
 // 初始化数据
 onMounted(() => {
   initContextMenu()
   getFriendsDisplayName()
   getContacts()
   fetchLoginInfo().then(
-    info => selfInfo.value = info
+    async info => {
+      selfInfo.value = info
+      selfInfo.value = await fetchStrangerInfo(info.user_id)
+    }
   )
 });
 
@@ -340,6 +356,8 @@ onUnmounted(() => {
       :active-contact="activeContact"
       :loading="loadingContacts"
       @select="selectContact"
+      :self-info="selfInfo"
+      @change-self-long-nick="changeSelfLongNick"
     />
     <ChatArea
       :active-contact="activeContact"
@@ -364,112 +382,6 @@ onUnmounted(() => {
 </style>
 
 <style>
-@font-face {
-  font-family: "Color Emoji";
-  src: url("/QQ/fonts/AppleColorEmoji.ttf") format('truetype');
-  unicode-range: U+1F300-1F5FF, U+1F600-1F64F, U+1F680-1F6FF, U+2600-26FF, U+2700-27BF;/*不包含空白符及数字*/
-}
-
-@font-face {
-  font-family: "Color Emoji Fix";
-  src: url("/QQ/fonts/AppleColorEmoji-fix.ttf") format('truetype');
-}
-
-* {
-  outline: none;
-  -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
-}
-
-body, html {
-  margin: 0;
-  padding: 0;
-  overflow: hidden;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-}
-
-:root {
-  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
-
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
-
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-* {
-  font-family: "Color Emoji", system-ui, "PingFang SC", PingFangSC-Regular, "Microsoft YaHei", "Hiragino Sans GB", "Heiti SC", "WenQuanYi Micro Hei", Arial, Helvetica, sans-serif, "Apple Braille", "Color Emoji Fix"
-}
-
-.can-drag {
-  -webkit-app-region: drag;
-}
-
-.cannot-drag {
-  -webkit-app-region: no-drag;
-}
-
-.no-user-select {
-  -webkit-user-select: none; /* Safari */
-  -khtml-user-select: none; /* Konqueror HTML */
-  -moz-user-select: none; /* Firefox */
-  -o-user-select: none; /* Opera */
-  user-select: none; /* Generic */
-
-  -webkit-user-drag: none; /* Safari */
-  -khtml-user-drag: none; /* Konqueror HTML */
-  -moz-user-drag: none; /* Firefox */
-  -o-user-drag: none; /* Opera */
-  user-drag: none; /* Generic */
-}
-
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-
-a:hover {
-  color: #535bf2;
-}
-
-body {
-  margin: 0;
-  min-width: 320px;
-  min-height: 100vh;
-}
-
-h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
-}
-
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  background-color: #1a1a1a;
-  cursor: pointer;
-  transition: border-color 0.25s;
-}
-
-button:hover {
-  border-color: #646cff;
-}
-
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
-}
-
 .card {
   padding: 2em;
 }

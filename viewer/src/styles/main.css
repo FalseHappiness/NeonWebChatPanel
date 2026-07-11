@@ -1,5 +1,3 @@
-@import 'bootstrap/dist/css/bootstrap.min.css';
-
 .text-muted {
     font-size: 80%;
     color: #999999 !important;
@@ -12,4 +10,36 @@
     max-width: 100%;
     display: inline-block;
     vertical-align: middle;
+}
+
+.display-flex {
+    display: -webkit-box !important;
+    display: -ms-flexbox !important;
+    display: flex !important
+}
+
+.justify-content-between {
+    -webkit-box-pack: justify !important;
+    -ms-flex-pack: justify !important;
+    justify-content: space-between !important
+}
+
+.justify-content-center {
+    -webkit-box-pack: center !important;
+    -ms-flex-pack: center !important;
+    justify-content: center !important
+}
+
+.align-items-center {
+    -webkit-box-align: center !important;
+    -ms-flex-align: center !important;
+    align-items: center !important
+}
+
+.text-center {
+    text-align: center !important
+}
+
+.height-100 {
+    height: 100% !important
 }
