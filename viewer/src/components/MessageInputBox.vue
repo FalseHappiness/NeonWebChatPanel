@@ -628,6 +628,19 @@ export default defineComponent({
       this.insertNodeAtCursor(document.createTextNode(text))
     },
 
+    // 递归清除元素内纯空白/换行文本节点，解决span之间空格
+    clearEmptyTextNodes(el) {
+      const childNodes = Array.from(el.childNodes);
+      for (const node of childNodes) {
+        // 纯空格、换行、制表符文本直接删除
+        if (node.nodeType === Node.TEXT_NODE && node.textContent.trim() === '') {
+          node.remove();
+        } else if (node.nodeType === Node.ELEMENT_NODE) {
+          this.clearEmptyTextNodes(node);
+        }
+      }
+    },
+
     async insertDataTransferItemsAtCursor(items) {
       if (items.length > 0) {
         // console.log(items)
@@ -705,6 +718,9 @@ export default defineComponent({
 
             fragment = this.keepOnlyImagesAndText(fragment)
 
+            // 新增：清除所有空白换行文本，消除span间隙
+            this.clearEmptyTextNodes(fragment)
+
             this.insertNodeAtCursor(fragment)
           }
         }
@@ -713,12 +729,11 @@ export default defineComponent({
 
     keepOnlyImagesAndText(fragment) {
       const This = this;
-      // 需要完全删除的标签列表
+      // 需要完全删除的标签列表（移除 select/button，表单控件单独逻辑处理）
       const TAGS_TO_REMOVE = [
         'head', 'script', 'style', 'link', 'meta', 'noscript',
         'base', 'title', 'template', 'svg', 'canvas', 'iframe',
-        'object', 'embed', 'input', 'textarea', 'select', 'button',
-        'audio', 'video', 'source', 'track', 'map', 'area', 'picture'
+        'object', 'embed', 'audio', 'video', 'source', 'track', 'map', 'area', 'picture'
       ];
 
       // 块级元素列表（默认display: block的元素）
@@ -730,24 +745,53 @@ export default defineComponent({
         'tfoot', 'thead', 'tbody', 'tr', 'td', 'th', 'colgroup', 'col', 'caption'
       ];
 
+      // 所有表单控件标签（需要特殊提取文本，不直接删除）
+      const FORM_CTRL_TAGS = [
+        'input', 'textarea', 'button', 'select', 'option', 'optgroup', 'legend'
+      ];
+
       /**
        * 处理文本内容，将空格转换为 &nbsp;，合并连续空格
        * @param {string} text - 原始文本
        * @returns {string} 处理后的文本
        */
       function processTextContent(text) {
-        // \u0020=&#32; \u00A0=&nbsp;
-
-        // 1. 将 &#32; 替换为 &nbsp;
-        // text = text.replace(/\u0020/g, '\u00A0');
-
-        // 2. 将普通空格替换为 &nbsp;
+        if (!text) return '';
         text = text.replace(/ /g, '\u00A0');
-
-        // 3. 合并连续的 &nbsp; 为一个
-        // text = text.replace(/\u00A0+/g, '\u00A0');
-
         return text;
+      }
+
+      /**
+       * 提取表单控件可读文本
+       * @param {HTMLElement} el 表单元素
+       * @returns {string}
+       */
+      function getFormControlText(el) {
+        const tag = el.tagName.toLowerCase();
+        switch (tag) {
+          case 'input':
+            // 优先取value，无值取placeholder
+            return el.value?.trim() || el.placeholder || '';
+          case 'textarea':
+            return el.value || '';
+          case 'button':
+            // button文本由内部子节点渲染，这里返回空，后续递归取子节点
+            return '';
+          case 'select':
+            // 拼接所有选中/全部option文本
+            let optText = '';
+            el.querySelectorAll('option').forEach(opt => {
+              optText += opt.textContent + ' ';
+            });
+            return optText.trim();
+          case 'option':
+          case 'optgroup':
+            return el.textContent || '';
+          case 'legend':
+            return el.textContent || '';
+          default:
+            return '';
+        }
       }
 
       /**
@@ -771,7 +815,20 @@ export default defineComponent({
             return processChildren(node);
           }
 
-          // 2.2 处理特殊元素
+          // ========== 新增：表单控件特殊处理分支 ==========
+          if (FORM_CTRL_TAGS.includes(tagName)) {
+            return handleFormElement(node);
+          }
+
+          // label 单独处理：保留标签容器，内部正常递归解析
+          if (tagName === 'label') {
+            const labelWrap = document.createElement('span');
+            const childNodes = processChildren(node);
+            childNodes.forEach(c => labelWrap.appendChild(c));
+            return [labelWrap];
+          }
+
+          // 2.2 原有特殊元素
           switch (tagName) {
             case 'img':
               return [createCleanImage(node)];
@@ -826,6 +883,33 @@ export default defineComponent({
         }
 
         // 3. 其他类型节点（注释等）直接删除
+        return [];
+      }
+
+      /**
+       * 统一处理表单控件元素：丢弃控件标签，只输出可读文本/子内容
+       * @param {HTMLElement} el
+       * @returns {Node[]}
+       */
+      function handleFormElement(el) {
+        const tag = el.tagName.toLowerCase();
+        const text = getFormControlText(el);
+        const resultNodes = [];
+
+        // input / textarea / select / option / optgroup / legend：纯文本输出
+        if (['input', 'textarea', 'select', 'option', 'optgroup', 'legend'].includes(tag)) {
+          if (text) {
+            resultNodes.push(document.createTextNode(processTextContent(text)));
+          }
+          // 不保留原标签，只返回提取的文本
+          return resultNodes;
+        }
+
+        // button：丢弃button标签，递归解析内部所有子节点（图片、文字、br等）
+        if (tag === 'button') {
+          return processChildren(el);
+        }
+
         return [];
       }
 
@@ -1112,7 +1196,7 @@ export default defineComponent({
       const processNodes = (nodes, parent_messages) => {
         nodes.forEach(node => {
           if (node.nodeType === Node.TEXT_NODE) {
-            addText(normalizeWhitespace(node.textContent), parent_messages)
+            addText(node.textContent, parent_messages)
           } else if (node.nodeType === Node.ELEMENT_NODE) {
             if (node.tagName === 'A') {
               const qq = node.dataset.qq
@@ -1147,51 +1231,66 @@ export default defineComponent({
         return parent_messages
       }
 
-      const processBasicMessages = (list) => {
-        const final_messages = []
-        const process = messages => {
-          messages.forEach((msg, index) => {
-            if (msg.elementNode) {
-              if (msg.occupyOneLine) {
-                if (final_messages.length > 0 && final_messages[final_messages.length - 1].type === 'text') {
-                  final_messages[final_messages.length - 1].data.text += '\n'
-                }
-                if (messages[index + 1]?.type === 'text') {
-                  messages[index + 1].data.text = '\n' + messages[index + 1].data.text
-                }
-              }
-              process(msg.contents)
-            } else {
-              final_messages.push(msg)
-            }
-          })
-        }
-        process(list)
-        const result = []
+      function processBasicMessages(list) {
+        // 递归扁平化，返回消息数组（未合并文本）
+        const flatten = (nodes) => {
+          const result = [];
 
-        final_messages.forEach(value => {
-          const last_value = result[result.length - 1]
-          if (last_value) {
-            if (value.type === 'text') {
-              if (last_value.type === 'text') {
-                last_value.data.text += value.data.text
-                return
+          for (let i = 0; i < nodes.length; i++) {
+            const node = nodes[i];
+
+            // 兄弟节点之间：前一个或当前节点是独占一行元素时，插入换行
+            if (i > 0) {
+              const prev = nodes[i - 1];
+              const prevIsBlock = prev.elementNode && prev.occupyOneLine;
+              const currIsBlock = node.elementNode && node.occupyOneLine;
+              if (prevIsBlock || currIsBlock) {
+                // 全新对象，不污染原数组
+                result.push({ type: 'text', data: { text: '\n' } });
               }
+            }
+
+            if (node.elementNode) {
+              if (node.occupyOneLine) {
+                // 独占一行：递归子内容
+                const children = flatten(node.contents);
+                if (children.length === 0) {
+                  // 空块生成一个换行（如 <div></div>）
+                  result.push({ type: 'text', data: { text: '\n' } });
+                } else {
+                  for (const child of children) {
+                    result.push(child);
+                  }
+                }
+              } else {
+                // 非独占一行（如 <span>）：直接展平内容，不加换行
+                const children = flatten(node.contents);
+                for (const child of children) {
+                  result.push(child);
+                }
+              }
+            } else {
+              // 叶子消息（text/image/at/face 等），浅拷贝防修改原数组
+              result.push({ ...node, data: { ...node.data } });
             }
           }
-          result.push(value)
-        })
 
-        return result
-      }
+          return result;
+        };
 
-      function normalizeWhitespace(str) {
-        // 如果字符串全是换行符（\n, \r, \r\n），则直接删除
-        if (/^[\r\n]+$/.test(str)) {
-          return "";
+        const flatMessages = flatten(list);
+
+        // 合并连续的 text 类型消息
+        const merged = [];
+        for (const msg of flatMessages) {
+          if (msg.type === 'text' && merged.length > 0 && merged[merged.length - 1].type === 'text') {
+            merged[merged.length - 1].data.text += msg.data.text;
+          } else {
+            merged.push(msg);
+          }
         }
-        // 否则，替换所有连续空白符为一个空格
-        return str.replace(/\s+/g, ' ').trim();
+
+        return merged;
       }
 
       const basic_messages = processNodes(fragment.childNodes, [])
@@ -1219,7 +1318,12 @@ export default defineComponent({
 
       console.log('Send message:', message)
 
-      fetchSendMessage(this.activeContact, message)
+      fetchSendMessage(this.activeContact, message).then(r => {
+        if (r?.status === 'error') {
+          showToast('发送消息失败')
+          console.log('Send message error:', r)
+        }
+      })
 
       this.$refs.editor.innerHTML = ''
       this.quotedMessage = null
@@ -1917,7 +2021,9 @@ export default defineComponent({
         ></div>
       </CustomScrollBar>
 
-      <div class="message-input-send-button" @click="handleSendMessage">发送</div>
+      <div class="message-input-send-button-container">
+        <div class="message-input-send-button" @click="handleSendMessage">发送</div>
+      </div>
     </vue-resizable>
   </div>
 </template>
@@ -1933,18 +2039,23 @@ export default defineComponent({
 .message-input-resizeable {
   top: 0 !important;
   max-height: 100%;
-  padding: 0 0 10px 0;
+  padding: 0;
   display: flex;
   flex-direction: column;
   width: 100% !important;
+  align-items: stretch;
+  justify-content: flex-start;
 }
 
 .message-input-controls {
   white-space: nowrap;
   display: flex;
-  padding: 6px 0;
-  margin-bottom: 5px;
+  padding: 0;
+  margin: 0;
   justify-content: space-between;
+  align-items: center;
+  height: 35px;
+  flex-shrink: 0; /* 防止高度被压缩，可选优化 */
 }
 
 .message-input-ctrl-icon {
@@ -1953,6 +2064,7 @@ export default defineComponent({
   display: inline-block;
   margin: 0 0 0 15px;
   background-color: black;
+  vertical-align: middle;
 }
 
 .message-input-controls-right .message-input-ctrl-icon {
@@ -1969,15 +2081,24 @@ export default defineComponent({
   font-size: 13px;
   color: white;
   cursor: default;
-  margin: 10px 15px 0 0;
+  margin: 0 15px 0 0;
   display: inline-block;
   padding: 4px 20px;
   align-self: flex-end;
 }
 
+.message-input-send-button-container {
+  height: 45px;
+  display: flex;
+  align-items: flex-end;
+  flex-shrink: 0;
+  flex-direction: column;
+  justify-content: center;
+}
+
 .message-input-scroller {
   flex: 1;
-  height: calc(100% - 78px);
+  overflow: auto;
 }
 
 .message-input-editor {
@@ -1985,12 +2106,14 @@ export default defineComponent({
   flex: 1;
   outline: none;
   line-height: 22px;
-  font-size: 16px;
+  /*font-size: 16px;*/
   word-wrap: break-word;
+  word-break: break-all;
   overflow-wrap: break-word;
-  word-break: break-word;
+  /*word-break: break-word;*/
   color: black;
   /*white-space: break-spaces;*/
+  white-space: pre-wrap;
 }
 
 .message-input-editor:deep(.message-input-editor-image) {
