@@ -49,10 +49,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 挂载静态文件和模板
-# app.mount("/static", StaticFiles(directory="static"), name="static")
-# templates = Jinja2Templates(directory="templates")
-
 # 初始化 WebSocket 管理器
 onebot_manager = OneBotConnectionManager(config.ONEBOT_WS_TOKEN)
 frontend_manager = FrontendConnectionManager(onebot_manager)
@@ -113,14 +109,10 @@ def parse_int(value: Any, default: int = 0) -> int:
         return default
 
 
-# Web路由
-# @app.get("/")
-# async def index(request: Request):
-#     return templates.TemplateResponse("index.html", {"request": request})
+# -------- 公共核心方法（供 FastAPI 路由和 req_backend 共同调用） --------
 
-
-@app.api_route("/api/messages", methods=["GET", "POST"])
-async def get_messages(params: dict = Depends(get_request_params)):
+async def get_messages_core(params: dict):
+    """获取消息列表（核心实现）"""
     limit = parse_int(params.get('limit', 100))
     cursor = params.get('cursor')
     if cursor is not None:
@@ -328,8 +320,8 @@ async def get_messages(params: dict = Depends(get_request_params)):
     return result
 
 
-@app.api_route("/api/get_msg", methods=["GET", "POST"])
-async def get_msg(params: dict = Depends(get_request_params)):
+async def get_msg_core(params: dict):
+    """获取单条消息（核心实现），返回消息数据，未找到时抛出异常"""
     id_val = params.get('id')
     message_id_val = params.get('message_id')
 
@@ -343,59 +335,32 @@ async def get_msg(params: dict = Depends(get_request_params)):
         id_val if id_val is not None else message_id_val,
         type
     )
-    error = ''
 
     if msg is None and message_id_val is not None:
-        def error_handler(e, _):
-            nonlocal error
-            error = str(e)
-            return None
-
-        msg = await make_api_request(
-            endpoint='get_msg',
-            request_data={'message_id': message_id_val},
-            error_handler=error_handler,
-            custom_handler=lambda data, _: data
-        )
-        if msg is not None:
-            msg = convert_event_to_message_data(msg)
+        try:
+            api_data = await onebot_manager.call_action('get_msg', {'message_id': message_id_val})
+            msg = convert_event_to_message_data(api_data)
+        except Exception as e:
+            raise ValueError(f"Failed to get message from API: {e}")
 
     if msg is None:
-        return JSONResponse(
-            status_code=404,
-            content={
-                "status": "fail",
-                "code": 404,
-                'error': error,
-            }
-        )
-    else:
-        return {
-            "status": "success",
-            "code": 200,
-            "data": msg
-        }
+        raise ValueError(f"Message not found: {params}")
+
+    return msg
 
 
-@app.api_route("/api/sync", methods=["GET", "POST"])
-async def sync_messages(params: dict = Depends(get_request_params)):
+async def sync_messages_core(params: dict):
+    """同步新消息（核心实现）"""
     last_id = parse_int(params.get('last_id', 0))
     messages = db.get_new_messages(last_id)
     return {
-        'status': 'success',
-        'data': messages,
+        'messages': messages,
         'last_id': max([msg['id'] for msg in messages], default=last_id)
     }
 
 
-@app.api_route("/api/messages/clear", methods=["POST"])
-async def clear_messages():
-    db.clear_messages()
-    return {'success': True}
-
-
-@app.api_route("/api/contacts", methods=["GET", "POST"])
-async def get_contacts():
+async def get_contacts_core():
+    """获取联系人列表（核心实现）"""
     db_contacts = db.get_contacts()
     api_contacts = await onebot_handler.get_recent_contacts()
 
@@ -437,6 +402,70 @@ async def get_contacts():
     )
 
     return contacts
+
+
+# -------- req_backend 处理器注册 --------
+
+async def _req_backend_messages(params: dict):
+    return await get_messages_core(params)
+
+async def _req_backend_get_msg(params: dict):
+    return await get_msg_core(params)
+
+async def _req_backend_sync(params: dict):
+    return await sync_messages_core(params)
+
+async def _req_backend_contacts(params: dict):
+    return await get_contacts_core()
+
+frontend_manager.req_backend_handlers = {
+    'contacts': _req_backend_contacts,
+    'messages': _req_backend_messages,
+    'get_msg': _req_backend_get_msg,
+    'sync': _req_backend_sync,
+}
+
+
+# -------- 原 FastAPI 路由（保持接口不变，调用公共核心方法） --------
+
+@app.api_route("/api/messages", methods=["GET", "POST"])
+async def get_messages(params: dict = Depends(get_request_params)):
+    result = await get_messages_core(params)
+    return {"status": "success", "code": 200, "data": result}
+
+
+@app.api_route("/api/get_msg", methods=["GET", "POST"])
+async def get_msg(params: dict = Depends(get_request_params)):
+    try:
+        msg = await get_msg_core(params)
+        return {"status": "success", "code": 200, "data": msg}
+    except ValueError as e:
+        return JSONResponse(
+            status_code=404,
+            content={
+                "status": "fail",
+                "code": 404,
+                'error': str(e),
+            }
+        )
+
+
+@app.api_route("/api/sync", methods=["GET", "POST"])
+async def sync_messages(params: dict = Depends(get_request_params)):
+    result = await sync_messages_core(params)
+    return {"status": "success", "code": 200, "data": result}
+
+
+@app.api_route("/api/messages/clear", methods=["POST"])
+async def clear_messages():
+    db.clear_messages()
+    return {'success': True}
+
+
+@app.api_route("/api/contacts", methods=["GET", "POST"])
+async def get_contacts():
+    result = await get_contacts_core()
+    return {"status": "success", "code": 200, "data": result}
 
 
 # 通用API请求处理函数
@@ -533,58 +562,6 @@ async def get_friend_info(op=Depends(get_request_params)):
         original_params=op,
         request_params=['user_id'],
         custom_handler=friend_handler
-    )
-
-
-@app.api_route("/api/get_stranger_info", methods=["GET", "POST"])
-async def get_stranger_info(params: dict = Depends(get_request_params)):
-    return await make_api_request(
-        endpoint='get_stranger_info',
-        request_params=['user_id'],
-        original_params=params
-    )
-
-
-@app.api_route("/api/get_group_info", methods=["GET", "POST"])
-async def get_group_info(params: dict = Depends(get_request_params)):
-    return await make_api_request(
-        endpoint='get_group_info',
-        request_params=['group_id'],
-        original_params=params
-    )
-
-
-@app.api_route("/api/get_group_member_info", methods=["GET", "POST"])
-async def get_group_member_info(params: dict = Depends(get_request_params)):
-    return await make_api_request(
-        endpoint='get_group_member_info',
-        request_params=['group_id', 'user_id'],
-        original_params=params
-    )
-
-
-@app.api_route("/api/get_group_member_list", methods=["GET", "POST"])
-async def get_group_member_list(params: dict = Depends(get_request_params)):
-    return await make_api_request(
-        endpoint='get_group_member_list',
-        request_params=['group_id'],
-        original_params=params
-    )
-
-
-@app.api_route("/api/get_friend_list", methods=["GET", "POST"])
-async def get_friend_list():
-    return await make_api_request(
-        endpoint='get_friend_list',
-    )
-
-
-@app.api_route("/api/get_forward_msg", methods=["GET", "POST"])
-async def get_forward_msg(params: dict = Depends(get_request_params)):
-    return await make_api_request(
-        endpoint='get_forward_msg',
-        request_params=['message_id'],
-        original_params=params
     )
 
 
@@ -877,24 +854,6 @@ async def send_message(params: dict = Depends(get_request_params)):
         )
 
 
-@app.api_route("/api/set_essence_msg", methods=["GET", "POST"])
-async def set_essence_msg(params: dict = Depends(get_request_params)):
-    return await make_api_request(
-        endpoint='set_essence_msg',
-        request_params=['message_id'],
-        original_params=params
-    )
-
-
-@app.api_route("/api/delete_essence_msg", methods=["GET", "POST"])
-async def delete_essence_msg(params: dict = Depends(get_request_params)):
-    return await make_api_request(
-        endpoint='delete_essence_msg',
-        request_params=['message_id'],
-        original_params=params
-    )
-
-
 @app.api_route("/api/get_essence_msg_list", methods=["GET", "POST"])
 async def get_essence_msg_list(params: dict = Depends(get_request_params)):
     only_real_seq = parse_bool(params.get('only_real_seq', False))
@@ -911,93 +870,6 @@ async def get_essence_msg_list(params: dict = Depends(get_request_params)):
         request_params=['group_id'],
         original_params=params,
         custom_handler=process_data
-    )
-
-
-@app.api_route("/api/recall_msg", methods=["GET", "POST"])
-async def recall_msg(params: dict = Depends(get_request_params)):
-    return await make_api_request(
-        endpoint='delete_msg',
-        request_params=['message_id'],
-        original_params=params
-    )
-
-
-@app.api_route("/api/get_friends_with_category", methods=["GET", "POST"])
-async def get_friends_with_category():
-    return await make_api_request(endpoint='get_friends_with_category')
-
-
-@app.api_route("/api/get_group_list", methods=["GET", "POST"])
-async def get_group_list():
-    return await make_api_request(endpoint='get_group_list')
-
-
-@app.api_route("/api/forward_single_msg", methods=["GET", "POST"])
-async def forward_single_msg(params: dict = Depends(get_request_params)):
-    group_id = params.get('group_id')
-    user_id = params.get('user_id')
-    if not user_id and not group_id:
-        return {"status": "error", "message": "参数错误: 必须提供 user_id 或 group_id"}
-    return await make_api_request(
-        endpoint=f"forward_{'friend' if user_id else 'group'}_single_msg",
-        request_params=['message_id', 'user_id' if user_id else 'group_id'],
-        original_params=params
-    )
-
-
-@app.api_route("/api/get_group_notice", methods=["GET", "POST"])
-async def get_group_notice(params: dict = Depends(get_request_params)):
-    group_id = params.get('group_id')
-    if not group_id:
-        return {"status": "error", "message": "参数错误: 必须提供 group_id"}
-    return await make_api_request(
-        endpoint="_get_group_notice",
-        request_params=['group_id'],
-        original_params=params
-    )
-
-
-@app.api_route("/api/get_login_info", methods=["GET", "POST"])
-async def get_login_info():
-    return await make_api_request(
-        endpoint="get_login_info"
-    )
-
-
-@app.api_route("/api/set_group_card", methods=["GET", "POST"])
-async def set_group_card(params: dict = Depends(get_request_params)):
-    return await make_api_request(
-        endpoint="set_group_card",
-        request_params=['group_id', 'user_id', 'card'],
-        original_params=params
-    )
-
-
-@app.api_route("/api/set_group_remark", methods=["GET", "POST"])
-async def set_group_remark(params: dict = Depends(get_request_params)):
-    return await make_api_request(
-        endpoint="set_group_remark",
-        request_params=['group_id', 'remark'],
-        original_params=params
-    )
-
-
-@app.api_route("/api/upload_private_file", methods=["GET", "POST"])
-async def upload_private_file(params: dict = Depends(get_request_params)):
-    return await make_api_request(
-        endpoint="upload_private_file",
-        request_params=['user_id', 'file', 'name'],
-        original_params=params
-    )
-
-
-@app.api_route("/api/set_self_longnick", methods=["GET", "POST"])
-async def set_self_longnick(params: dict = Depends(get_request_params)):
-    return await make_api_request(
-        endpoint="set_self_longnick",
-        request_params=['longNick'],
-        original_params=params
     )
 
 

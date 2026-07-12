@@ -1,7 +1,7 @@
 import { ref, onUnmounted, watch } from 'vue'
 import axios from 'axios'
 import { nanoid } from "nanoid";
-import { apiBaseUrl } from "../utils/backend-api.js";
+import { apiBaseUrl, fetchSyncMessages } from "../utils/backend-api.js";
 
 export function useWebSocket(url, { onMessage, onNewContact, onNotice }) {
   const socket = ref(null)
@@ -14,6 +14,8 @@ export function useWebSocket(url, { onMessage, onNewContact, onNotice }) {
 
   // 存储正在等待响应的 send_action 回调
   const pendingActions = new Map()
+  // 存储正在等待响应的 req_backend 回调
+  const pendingBackendRequests = new Map()
 
   const onReceiveMessage = (message, echo_msg = false) => {
     try {
@@ -21,13 +23,22 @@ export function useWebSocket(url, { onMessage, onNewContact, onNotice }) {
       if (message.type === 'send_action_response') {
         const echo = message.echo
         if (echo && pendingActions.has(echo)) {
-          const { resolve, reject } = pendingActions.get(echo)
+          const { resolve, cleanup } = pendingActions.get(echo)
           pendingActions.delete(echo)
-          if (message.status === 'ok') {
-            resolve(message.data)
-          } else {
-            reject(new Error(message.message || 'Action failed'))
-          }
+          cleanup && cleanup()
+          resolve(message)
+        }
+        return
+      }
+
+      // 检查是否是 req_backend 的响应
+      if (message.type === 'req_backend_response') {
+        const echo = message.echo
+        if (echo && pendingBackendRequests.has(echo)) {
+          const { resolve, cleanup } = pendingBackendRequests.get(echo)
+          pendingBackendRequests.delete(echo)
+          cleanup && cleanup()
+          resolve(message)
         }
         return
       }
@@ -49,24 +60,59 @@ export function useWebSocket(url, { onMessage, onNewContact, onNotice }) {
    * 通过 WebSocket 发送 action 请求并等待响应
    * @param {string} action - OneBot action 名称
    * @param {object} params - action 参数
+   * @param signal          - 终止信号
    * @param {number} timeout - 超时时间(毫秒)
    * @returns {Promise<any>} action 响应数据
    */
-  const sendAction = (action, params = {}, timeout = 60000) => {
+  const sendAction = (action, params = {}, signal = undefined, timeout = 300000) => {
     return new Promise((resolve, reject) => {
       if (!socket.value || socket.value.readyState !== WebSocket.OPEN) {
         reject(new Error('WebSocket is not connected'))
         return
       }
 
+      // 如果信号已经中止，立即拒绝
+      if (signal && signal.aborted) {
+        reject(new DOMException('The operation was aborted', 'AbortError'))
+        return
+      }
+
       const echo = nanoid()
 
-      pendingActions.set(echo, { resolve, reject })
+      // 清理 abort 事件监听
+      const cleanup = () => {
+        if (signal) {
+          signal.removeEventListener('abort', onAbort)
+        }
+      }
 
-      // 超时处理
-      const timer = setTimeout(() => {
+      // 监听 abort 信号
+      const onAbort = () => {
         if (pendingActions.has(echo)) {
           pendingActions.delete(echo)
+          cleanup()
+          // 通知后端取消该 action
+          if (socket.value && socket.value.readyState === WebSocket.OPEN) {
+            socket.value.send(JSON.stringify({
+              type: 'cancel_action',
+              echo: echo
+            }))
+          }
+          reject(new DOMException('The operation was aborted', 'AbortError'))
+        }
+      }
+
+      if (signal) {
+        signal.addEventListener('abort', onAbort, { once: true })
+      }
+
+      pendingActions.set(echo, { resolve, reject, cleanup })
+
+      // 超时处理
+      setTimeout(() => {
+        if (pendingActions.has(echo)) {
+          pendingActions.delete(echo)
+          cleanup()
           reject(new Error(`Action "${action}" timed out after ${timeout}ms`))
         }
       }, timeout)
@@ -83,19 +129,84 @@ export function useWebSocket(url, { onMessage, onNewContact, onNotice }) {
     })
   }
 
+  /**
+   * 通过 WebSocket 发送 req_backend 请求并等待响应
+   * @param {string} endpoint - 后端 endpoint 名称 (contacts / get_msg / messages / sync)
+   * @param {object} params - 请求参数
+   * @param signal          - 终止信号
+   * @param {number} timeout - 超时时间(毫秒)
+   * @returns {Promise<any>} 后端响应数据
+   */
+  const reqBackend = (endpoint, params = {}, signal = undefined, timeout = 300000) => {
+    return new Promise((resolve, reject) => {
+      if (!socket.value || socket.value.readyState !== WebSocket.OPEN) {
+        reject(new Error('WebSocket is not connected'))
+        return
+      }
+
+      // 如果信号已经中止，立即拒绝
+      if (signal && signal.aborted) {
+        reject(new DOMException('The operation was aborted', 'AbortError'))
+        return
+      }
+
+      const echo = nanoid()
+
+      // 清理 abort 事件监听
+      const cleanup = () => {
+        if (signal) {
+          signal.removeEventListener('abort', onAbort)
+        }
+      }
+
+      // 监听 abort 信号
+      const onAbort = () => {
+        if (pendingBackendRequests.has(echo)) {
+          pendingBackendRequests.delete(echo)
+          cleanup()
+          // 通知后端取消该请求
+          if (socket.value && socket.value.readyState === WebSocket.OPEN) {
+            socket.value.send(JSON.stringify({
+              type: 'cancel_action',
+              echo: echo
+            }))
+          }
+          reject(new DOMException('The operation was aborted', 'AbortError'))
+        }
+      }
+
+      if (signal) {
+        signal.addEventListener('abort', onAbort, { once: true })
+      }
+
+      pendingBackendRequests.set(echo, { resolve, reject, cleanup })
+
+      // 超时处理
+      setTimeout(() => {
+        if (pendingBackendRequests.has(echo)) {
+          pendingBackendRequests.delete(echo)
+          cleanup()
+          reject(new Error(`reqBackend "${endpoint}" timed out after ${timeout}ms`))
+        }
+      }, timeout)
+
+      // 发送请求
+      socket.value.send(JSON.stringify({
+        type: 'req_backend',
+        endpoint: endpoint,
+        params: params,
+        echo: echo
+      }))
+    })
+  }
+
   // 同步新消息
   const syncMessages = async () => {
     try {
-      const response = await axios.get(apiBaseUrl + '/api/sync', {
-        params: { last_id: lastMessageId.value }
+      (await fetchSyncMessages(lastMessageId.value))?.messages?.forEach(message => {
+        onReceiveMessage(message)
       })
-
-      if (response.data.status === 'success') {
-        response.data.data.forEach(message => {
-          onReceiveMessage(message)
-        })
-        shouldSync.value = false
-      }
+      shouldSync.value = false
     } catch (error) {
       console.error('Sync failed:', error)
       // 同步失败，稍后重试
@@ -188,10 +299,18 @@ export function useWebSocket(url, { onMessage, onNewContact, onNotice }) {
       shouldSync.value = true
 
       // 拒绝所有 pending 的 action
-      for (const [echo, { reject }] of pendingActions) {
+      for (const [echo, { reject, cleanup }] of pendingActions) {
+        cleanup && cleanup()
         reject(new Error('WebSocket disconnected'))
       }
       pendingActions.clear()
+
+      // 拒绝所有 pending 的 req_backend 请求
+      for (const [echo, { reject, cleanup }] of pendingBackendRequests) {
+        cleanup && cleanup()
+        reject(new Error('WebSocket disconnected'))
+      }
+      pendingBackendRequests.clear()
 
       // 无限重连
       if (reconnectAttempts.value < maxReconnectAttempts) {
@@ -224,6 +343,7 @@ export function useWebSocket(url, { onMessage, onNewContact, onNotice }) {
     isConnected,
     lastMessageId,
     syncMessages,
-    sendAction
+    sendAction,
+    reqBackend
   }
 }

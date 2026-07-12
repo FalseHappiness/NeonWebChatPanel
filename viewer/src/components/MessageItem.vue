@@ -585,6 +585,16 @@ onUnmounted(() => {
   margin-right: 20px;
 }
 
+@media (max-width: 425px) {
+  .message-in .message-avatar {
+    margin-left: 10px;
+  }
+
+  .message-out .message-avatar {
+    margin-right: 10px;
+  }
+}
+
 .group .message-avatar {
   margin-top: 4px;
 }
@@ -620,7 +630,13 @@ onUnmounted(() => {
 }
 
 .message-msg-side {
-  max-width: calc(100% - 150px);
+  max-width: calc(100% - 140px);
+}
+
+@media (max-width: 425px) {
+  .message-msg-side {
+    max-width: 70%;
+  }
 }
 
 .message-send-time {

@@ -19,6 +19,55 @@ if (import.meta.env.PROD) {
   wsUri = `${wsProtocol}//${host}/ws/frontend`;
 }
 
+const fetchAction = async (endpoint, data, signal) => {
+  try {
+    if (signal instanceof AbortController) {
+      signal = signal.signal
+    }
+    return await useGlobalStore().sendAction(endpoint, data, signal)
+  } catch (e) {
+    showToast("error", `Fetch action ${endpoint} error`);
+    console.error(`Fetch action ${endpoint} error`, e);
+    throw e;
+  }
+}
+
+const fetchActionData = async (endpoint, params, signal) => {
+  const response = await fetchAction(endpoint, params, signal)
+  if (response.status === 'ok') {
+    return response.data;
+  }
+  throw new Error(`Action ${endpoint} error: ` + JSON.stringify(response))
+}
+
+/**
+ * 通过 WebSocket 的 req_backend 类型请求后端（FastAPI 本地接口）
+ * @param {string} endpoint - 后端端点名 (contacts / get_msg / messages / sync)
+ * @param {object} [params] - 请求参数
+ * @param {AbortSignal|AbortController} [signal] - 中断信号
+ * @returns {Promise<any>} 后端响应数据
+ */
+const fetchBackend = async (endpoint, params = {}, signal) => {
+  try {
+    if (signal instanceof AbortController) {
+      signal = signal.signal
+    }
+    return await useGlobalStore().reqBackend(endpoint, params, signal)
+  } catch (e) {
+    showToast("error", `Fetch backend ${endpoint} error`);
+    console.error(`Fetch backend ${endpoint} error`, e);
+    throw e;
+  }
+}
+
+const fetchBackendData = async (endpoint, params, signal) => {
+  const response = await fetchBackend(endpoint, params, signal)
+  if (['success', 'ok'].includes(response.status)) {
+    return response.data;
+  }
+  throw new Error(`Backend ${endpoint} error: ` + JSON.stringify(response))
+}
+
 const fetchAPI = async (endpoint, params = {}, method = 'POST', data = null, signal = null) => {
   try {
     if (signal instanceof AbortController) {
@@ -62,19 +111,19 @@ const fetchDataInfo = async (endpoint, params) => {
 }
 
 export const fetchGroupInfo = async (group_id) => {
-  return await fetchDataInfo('get_group_info', { group_id: group_id })
+  return await fetchActionData('get_group_info', { group_id: group_id })
 }
 
 const fetchStrangerInfo = async (user_id) => {
-  return await fetchDataInfo("get_stranger_info", { user_id: user_id })
+  return await fetchActionData("get_stranger_info", { user_id: user_id })
 }
 
 const fetchGroupMemberInfo = async (group_id, user_id) => {
-  return await fetchDataInfo("get_group_member_info", { group_id: group_id, user_id: user_id })
+  return await fetchActionData("get_group_member_info", { group_id: group_id, user_id: user_id })
 }
 
 const fetchGroupMemberList = async (group_id) => {
-  return await fetchDataInfo("get_group_member_list", { group_id: group_id })
+  return await fetchActionData("get_group_member_list", { group_id: group_id })
 }
 
 const FriendListCache = {
@@ -88,7 +137,7 @@ const FriendListCache = {
 
 const fetchFriendList = async (force = false) => {
   if (FriendListCache.expired() || force) {
-    FriendListCache.list = await fetchDataInfo("get_friend_list")
+    FriendListCache.list = await fetchActionData("get_friend_list")
   }
   return FriendListCache.list
 }
@@ -106,7 +155,7 @@ const fetchUserInfo = async (user_id) => {
 }
 
 const fetchMessages = async (params) => {
-  return fetchAPI(
+  return await fetchBackendData(
     'messages',
     Object.assign(
       {},
@@ -120,29 +169,75 @@ const fetchMessages = async (params) => {
 }
 
 const fetchMsg = async (msg_id) => {
-  return fetchDataInfo('get_msg', { message_id: msg_id })
+  return await fetchBackendData('get_msg', { message_id: msg_id })
+}
+
+const fetchSyncMessages = async last_id => {
+  return await fetchBackendData('sync', { last_id })
 }
 
 const fetchForwardMessage = async (id) => {
-  return (await fetchDataInfo('get_forward_msg', { message_id: id })).messages
+  return (await fetchActionData('get_forward_msg', { message_id: id })).messages
 }
 
+/**
+ * 发送消息接口封装
+ * @param {object} contact 联系人对象 { type: 'group'|'private', contact_id: number }
+ * @param {string | Array} message 消息内容，字符串或消息段数组
+ * @param {AbortSignal} signal 中断信号
+ * @returns {Promise<any>} OneBot接口返回结果
+ */
 const fetchSendMessage = async (contact, message, signal) => {
-  const data = { message }
-  data[contact.type === 'group' ? "group_id" : "user_id"] = contact.contact_id
-  return await fetchOptionsAPI('send_message', { data, signal })
-}
+    const isGroup = contact.type === 'group';
+
+    // 字符串JSON解析
+    message = typeof message === 'string' ? JSON.parse(message) : message;
+
+    // 戳一戳特殊逻辑
+    if (Array.isArray(message) && message.length > 0) {
+      const firstSeg = message[0];
+      if (firstSeg.type === 'poke' && firstSeg.data) {
+        const pokeData = firstSeg.data;
+        const pokeUser = pokeData.user_id ?? -1;
+        const pokeGroup = pokeData.group_id ?? -1;
+        const pokeTarget = pokeData.target_id ?? -1;
+
+        const reqData = {
+          user_id: pokeUser || pokeTarget,
+          target_id: pokeTarget || pokeUser,
+        };
+        if (pokeGroup !== -1) {
+          reqData.group_id = pokeGroup;
+        }
+
+        if (pokeUser !== -1) {
+          return await fetchAction("send_poke", reqData, signal);
+        }
+      }
+    }
+
+    // 组装普通消息请求参数
+    const reqData = { message };
+    reqData[isGroup ? 'group_id' : 'user_id'] = contact.contact_id
+    // 拼接接口 endpoint
+    const endpoint = isGroup ? "send_group_msg" : "send_private_msg";
+
+    return await fetchAction(endpoint, reqData, signal);
+  }
+;
 
 const fetchEssenceMessages = async (group_id, only_real_seq) => {
-  return fetchDataInfo('get_essence_msg_list', { group_id, only_real_seq })
+  const data = await fetchActionData('get_essence_msg_list', { group_id, only_real_seq })
+  return only_real_seq ? data.map(item => item.msg_seq) : data
+
 }
 
 const fetchChangeEssenceMsg = async (message_id, set) => {
-  return await fetchAPI(set ? 'set_essence_msg' : 'delete_essence_msg', { message_id })
+  return await fetchAction(set ? 'set_essence_msg' : 'delete_essence_msg', { message_id })
 }
 
 const fetchRecallMessage = async (message_id) => {
-  return await fetchAPI('recall_msg', { message_id })
+  return await fetchAction('recall_msg', { message_id })
 }
 
 function fileToBase64(file) {
@@ -225,7 +320,6 @@ export async function calcFileSha256(file, chunkSize = 2 * 1024 * 1024, onProgre
  * @param {object} task.contact - 联系人信息 { contact_id, type }
  * @param {File} task.file - 要上传的文件对象
  * @param {AbortController} task.controller - 中止控制器
- * @param {Function} task.sendAction - 通过 WebSocket 发送 OneBot action 的函数
  * @param {number} task.start_timestamp
  * @param {number} task.chunk_size
  * @param {number} task.chunk_index
@@ -234,7 +328,7 @@ export async function calcFileSha256(file, chunkSize = 2 * 1024 * 1024, onProgre
  * @returns {Promise<object>} 上传完成后的消息响应
  */
 const fetchSendFileStream = async (task) => {
-  const { contact, file, controller, sendAction } = task
+  const { contact, file, controller } = task
   const CHUNK_SIZE = 64 * 1024; // 64KB
   const streamId = nanoid();
   const fileName = file.name;
@@ -266,7 +360,7 @@ const fetchSendFileStream = async (task) => {
 
     for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
       // 检查是否被中止
-      if (controller?.signal?.aborted || controller?.aborted) {
+      if (controller?.signal?.aborted) {
         throw new Error(`${fileName} 上传已取消`);
       }
       task.chunk_index = chunkIndex
@@ -299,7 +393,7 @@ const fetchSendFileStream = async (task) => {
       // console.log(`[fetchSendFileStream] 发送分片 ${chunkIndex + 1}/${totalChunks} (${chunkBytes.length} 字节, 已耗时 ${((Date.now() - startTimestamp) / 1000).toFixed(1)}s)`);
 
       // 通过 sendAction 发送分片
-      const response = await sendAction('upload_file_stream', params);
+      const response = await fetchActionData('upload_file_stream', params);
 
       // console.log(`[fetchSendFileStream] 分片 ${chunkIndex + 1}/${totalChunks} 响应:`, response);
 
@@ -320,7 +414,7 @@ const fetchSendFileStream = async (task) => {
       start_timestamp: startTimestamp
     };
 
-    const completeResponse = await sendAction('upload_file_stream', completeParams);
+    const completeResponse = await fetchActionData('upload_file_stream', completeParams);
 
     // console.log(`[fetchSendFileStream] 合并响应:`, completeResponse);
 
@@ -355,38 +449,39 @@ const fetchSendFileStream = async (task) => {
 };
 
 const fetchCategoricalFriends = async () => {
-  return fetchDataInfo('get_friends_with_category')
+  return fetchActionData('get_friends_with_category')
 }
 
 const fetchGroupList = async () => {
-  return fetchDataInfo('get_group_list')
+  return fetchActionData('get_group_list')
 }
 
 const fetchForwardSingleMsg = async (message_id, contact) => {
-  return await fetchAPI('forward_single_msg', {
+  const isGroup = contact.type === 'group'
+  return await fetchAction(`forward_${isGroup ? "group" : "friend"}_single_msg`, {
     message_id,
-    [contact.type === 'group' ? "group_id" : "user_id"]: contact.contact_id
+    [isGroup ? "group_id" : "user_id"]: contact.contact_id
   })
 }
 
 const fetchGroupNotice = async (group_id) => {
-  return fetchDataInfo('get_group_notice', { group_id })
+  return fetchActionData('_get_group_notice', { group_id })
 }
 
 const fetchLoginInfo = async (group_id) => {
-  return fetchDataInfo('get_login_info', { group_id })
+  return fetchActionData('get_login_info', { group_id })
 }
 
 const fetchSetGroupRemark = async (group_id, remark) => {
-  return await fetchAPI('set_group_remark', { group_id, remark })
+  return await fetchAction('set_group_remark', { group_id, remark })
 }
 
 const fetchSetGroupMemberRemark = async (group_id, user_id, card) => {
-  return await fetchAPI('set_group_card', { group_id, user_id, card })
+  return await fetchAction('set_group_card', { group_id, user_id, card })
 }
 
 const fetchSetLongNick = async (longNick) => {
-  return await fetchAPI('set_self_longnick', { longNick })
+  return await fetchAction('set_self_longnick', { longNick })
 }
 
 const isObject = (variable) => {
@@ -662,11 +757,7 @@ const setGroupUserNameCache = (group_id, user_id, name) => {
 }
 
 const fetchContacts = async () => {
-  try {
-    return fetchAPI("contacts")
-  } catch (error) {
-    throw new Error(error)
-  }
+  return await fetchBackendData("contacts")
 }
 
 const getMultimediaProxyUrl = (url) => {
@@ -739,5 +830,6 @@ export {
   getGroupLogo,
   getUserLogo,
   fetchStrangerInfo,
-  fetchSetLongNick
+  fetchSetLongNick,
+  fetchSyncMessages
 }

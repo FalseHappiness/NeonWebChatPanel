@@ -47,7 +47,6 @@ export default defineComponent({
       default: null
     }
   },
-  inject: ['sendAction'],
   data() {
     return {
       lastCaretPosition: null,
@@ -360,7 +359,6 @@ export default defineComponent({
           controller,
           file,
           chunked: true,
-          sendAction: this.sendAction,
           start_timestamp: undefined,
           chunk_size: undefined,
           total_chunks: undefined,

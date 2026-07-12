@@ -441,8 +441,8 @@ onMounted(initContactInfo)
 
     <div v-if="activeContact" class="border-bottom chat-area-head">
       <span class="chat-area-head-name" :class="{'text-error': isError}">
-      <img class="chat-area-go-back-btn" alt="" src="/QQ/icons/arrow_left_24.svg"
-           @click="() => { selectContact(null) }">
+        <img class="chat-area-go-back-btn" alt="" src="/QQ/icons/arrow_left_24.svg"
+             @click="() => { selectContact(null) }">
         {{ displayName }}
         <span v-if="tempSession">&nbsp;</span>
         <small class="text-muted" v-if="tempSession" style="font-size: 100%">
@@ -600,6 +600,10 @@ onMounted(initContactInfo)
   display: flex;
   margin: 0 0 0 15px;
   align-items: center;
+}
+
+.chat-area-head-name .text-muted {
+  font-weight: normal;
 }
 
 .chat-area-head {

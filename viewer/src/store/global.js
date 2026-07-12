@@ -115,6 +115,11 @@ function sortNumbersAndOthers(arr) {
   return [...numbers, ...others];
 }
 
+const notInitFunction = (...args) => {
+  void args
+  throw new Error("This function is not initialized")
+}
+
 export const useGlobalStore = defineStore(
   'global',
   () => {
@@ -154,6 +159,8 @@ export const useGlobalStore = defineStore(
       emojiDescribes,
       allEmojiids,
       nameCaches,
+      sendAction: notInitFunction,
+      reqBackend: notInitFunction
     };
   },
   // {

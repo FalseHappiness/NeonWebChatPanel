@@ -13,11 +13,13 @@ import {
 import { showErrorToast, showToast } from "./utils/toast.js";
 import { destroyContextMenu, initContextMenu } from "./utils/context-menu.js";
 import "./App.css"
+import { useGlobalStore } from "./store/global.js";
 
 const contacts = ref([])
 const loadingContacts = ref(false)
 const activeContact = ref(null)
 const chatArea = ref(null)
+const wsInited = ref(false);
 
 // 初始化WebSocket
 const {
@@ -25,7 +27,8 @@ const {
   lastMessageId,
   syncMessages,
   socket,
-  sendAction
+  sendAction,
+  reqBackend
 } = useWebSocket(wsUri, {
   onMessage: (message) => {
     // 检查消息是否属于当前活跃的联系人
@@ -136,13 +139,15 @@ const {
   }
 })
 
-// 提供 sendAction 给子组件
-provide('sendAction', sendAction)
+// 提供 sendAction 和 reqBackend 给子组件
+useGlobalStore().sendAction = sendAction
+useGlobalStore().reqBackend = reqBackend
 
 // 监听连接状态变化
 watch(isConnected, (connected) => {
   if (connected) {
     console.log('WebSocket reconnected, checking for missed messages...')
+    wsInited.value = true;
   }
 })
 
@@ -330,9 +335,7 @@ const changeSelfLongNick = async longNick => {
 
 }
 
-// 初始化数据
-onMounted(() => {
-  initContextMenu()
+const initAppData = () => {
   getFriendsDisplayName()
   getContacts()
   fetchLoginInfo().then(
@@ -341,6 +344,17 @@ onMounted(() => {
       selfInfo.value = await fetchStrangerInfo(info.user_id)
     }
   )
+}
+
+watch(wsInited, newVal => {
+  if (newVal) {
+    initAppData()
+  }
+})
+
+// 初始化数据
+onMounted(() => {
+  initContextMenu()
 });
 
 onUnmounted(() => {
@@ -350,7 +364,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="chat-container">
+  <div class="chat-container" v-if="wsInited">
     <ContactList
       :contacts="contacts"
       :active-contact="activeContact"

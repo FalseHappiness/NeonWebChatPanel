@@ -109,6 +109,13 @@ class OneBotConnectionManager:
 
         return result
 
+    def cancel_action(self, echo: str):
+        """取消一个正在等待响应的 action"""
+        future = self.pending_actions.pop(echo, None)
+        if future and not future.done():
+            future.cancel()
+            print(f"OneBot action cancelled (echo: {echo})")
+
     # noinspection PyAsyncCall
     async def send_action(self, self_id: str, action: str, params: Dict[str, Any], timeout: float = 30.0) -> Any:
         """发送API动作并等待响应"""
@@ -132,6 +139,9 @@ class OneBotConnectionManager:
         except asyncio.TimeoutError:
             self.pending_actions.pop(echo, None)
             raise TimeoutError("Action timed out")
+        except asyncio.CancelledError:
+            self.pending_actions.pop(echo, None)
+            raise
         except ActionFailed as e:
             self.pending_actions.pop(echo, None)
             raise e
