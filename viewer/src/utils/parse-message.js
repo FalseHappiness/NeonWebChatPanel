@@ -412,12 +412,15 @@ const parseMessage = (message) => {
                 fetchDisplayName(id_list, type, newName => {
                   if (vnode?.el) {
                     vnode.el.textContent = `@${newName}`;
+                    vnode.el.dataset.displayName = newName
                   }
                 });
               },
-              class: "at-somebody-link",
+              class: "at-somebody-link message-execute-command",
               innerText: `@${getCacheName(id_list, type) || id}`,
-              'data-user-id': id
+              'data-user-id': id,
+              'data-command': 'at-somebody',
+              'data-display-name': "未获取"
             })
           )
         } else if (item.type === 'image') {

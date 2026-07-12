@@ -7,6 +7,7 @@ import 'simplebar-vue/dist/simplebar.min.css';
 import Tooltip from "./utils/Tooltip.vue";
 import { useGlobalStore } from "../store/global.js";
 import {
+  fetchDisplayName,
   fetchForwardSingleMsg,
   fetchSendFiles,
   fetchSendFileStream,
@@ -90,6 +91,7 @@ export default defineComponent({
     this.global = useGlobalStore()
 
     Emitter.on('forward-single-msg', this.handleForwardSingleMsg)
+    Emitter.on('input-at-somebody', this.handleInputAtSomebody)
   },
   beforeDestroy() {
     this.handleUnmounted()
@@ -107,6 +109,7 @@ export default defineComponent({
       document.removeEventListener('dragover', this.handleDocumentDragover);
 
       Emitter.off('forward-single-msg')
+      Emitter.off('input-at-somebody')
     },
     // 用户在编辑后调用此方法记录状态
     recordHistory() {
@@ -1583,6 +1586,10 @@ export default defineComponent({
       const span = document.createElement('span')
       span.innerHTML = '&nbsp;'
       this.insertNodesAtCursor(link, span)
+    },
+
+    handleInputAtSomebody(qq, name) {
+      this.insertAtUserAtCursor({ qq, name })
     },
 
     handleForwardSingleMsg(message_id, message_content) {

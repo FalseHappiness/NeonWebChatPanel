@@ -13,7 +13,7 @@ import {
 import { showErrorToast, showToast } from "./utils/toast.js";
 import { destroyContextMenu, initContextMenu } from "./utils/context-menu.js";
 import "./App.css"
-import { useGlobalStore } from "./store/global.js";
+import { CalledEmitter } from "./composables/event-bus.js";
 
 const contacts = ref([])
 const loadingContacts = ref(false)
@@ -140,8 +140,10 @@ const {
 })
 
 // 提供 sendAction 和 reqBackend 给子组件
-useGlobalStore().sendAction = sendAction
-useGlobalStore().reqBackend = reqBackend
+// useGlobalStore().sendAction = sendAction
+// useGlobalStore().reqBackend = reqBackend
+CalledEmitter.on("sendAction", sendAction)
+CalledEmitter.on("reqBackend", reqBackend)
 
 // 监听连接状态变化
 watch(isConnected, (connected) => {
@@ -360,6 +362,8 @@ onMounted(() => {
 onUnmounted(() => {
   destroyContextMenu()
   socket.value?.close()
+  CalledEmitter.off('sendAction')
+  CalledEmitter.off('reqBackend')
 })
 </script>
 

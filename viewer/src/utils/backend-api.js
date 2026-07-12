@@ -5,6 +5,7 @@ import { useGlobalStore } from "../store/global.js";
 import { showToast } from "./toast.js";
 import { createSHA256 } from 'hash-wasm';
 import { nanoid } from 'nanoid';
+import { CalledEmitter } from "../composables/event-bus.js";
 
 let apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
 let wsUri = import.meta.env.VITE_WS_URI;
@@ -24,7 +25,7 @@ const fetchAction = async (endpoint, data, signal) => {
     if (signal instanceof AbortController) {
       signal = signal.signal
     }
-    return await useGlobalStore().sendAction(endpoint, data, signal)
+    return await CalledEmitter.emit("sendAction", endpoint, data, signal)
   } catch (e) {
     showToast("error", `Fetch action ${endpoint} error`);
     console.error(`Fetch action ${endpoint} error`, e);
@@ -52,7 +53,7 @@ const fetchBackend = async (endpoint, params = {}, signal) => {
     if (signal instanceof AbortController) {
       signal = signal.signal
     }
-    return await useGlobalStore().reqBackend(endpoint, params, signal)
+    return await CalledEmitter.emit("reqBackend", endpoint, params, signal)
   } catch (e) {
     showToast("error", `Fetch backend ${endpoint} error`);
     console.error(`Fetch backend ${endpoint} error`, e);

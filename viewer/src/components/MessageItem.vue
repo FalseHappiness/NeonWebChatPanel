@@ -362,6 +362,19 @@ const handleNoticeExecuteCommand = e => {
   }
 }
 
+const handleMessageExecuteCommand = e => {
+  const element = e.target?.closest('.message-execute-command')
+  if (element) {
+    const command = element.dataset.command
+    if (typeof command === 'string') {
+      const atSomebody = 'at-somebody'
+      if (command === atSomebody) {
+        Emitter.emit("input-at-somebody", element.dataset.userId, element.dataset.displayName)
+      }
+    }
+  }
+}
+
 // 组件加载时
 onMounted(() => {
   document.addEventListener('mouseenter', handleMouseEnter, { capture: true })
@@ -445,6 +458,7 @@ onUnmounted(() => {
         v-custom-menu="customContextMenu"
         @copy="handleCopy"
         ref="messageContent"
+        @click="handleMessageExecuteCommand"
       >
         <message-html/>
       </div>
