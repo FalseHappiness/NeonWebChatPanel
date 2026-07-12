@@ -202,7 +202,8 @@ function processEvent(e) {
           x: position.x,
           y: position.y,
           items: items,
-          direction: position.direction// tl t tr l r bl b br
+          // 自动处理
+          // direction: position.direction // tl t tr l r bl b br
         });
       }
       e.preventDefault();

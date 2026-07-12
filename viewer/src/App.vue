@@ -139,12 +139,6 @@ const {
   }
 })
 
-// 提供 sendAction 和 reqBackend 给子组件
-// useGlobalStore().sendAction = sendAction
-// useGlobalStore().reqBackend = reqBackend
-CalledEmitter.on("sendAction", sendAction)
-CalledEmitter.on("reqBackend", reqBackend)
-
 // 监听连接状态变化
 watch(isConnected, (connected) => {
   if (connected) {
@@ -357,6 +351,9 @@ watch(wsInited, newVal => {
 // 初始化数据
 onMounted(() => {
   initContextMenu()
+  // 提供 sendAction 和 reqBackend 给子组件
+  CalledEmitter.on("sendAction", sendAction)
+  CalledEmitter.on("reqBackend", reqBackend)
 });
 
 onUnmounted(() => {
