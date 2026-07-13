@@ -1,3 +1,5 @@
+import traceback
+
 from fastapi import WebSocket
 from typing import Set, Optional, Dict, Tuple
 import asyncio
@@ -162,6 +164,7 @@ class FrontendConnectionManager:
                 }
             except Exception as e:
                 print(f"req_backend 失败: {endpoint} -> {e}")
+                traceback.print_exc()
                 response = {
                     "type": "req_backend_response",
                     "echo": echo,

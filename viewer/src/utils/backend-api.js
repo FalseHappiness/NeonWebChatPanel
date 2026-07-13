@@ -6,6 +6,7 @@ import { showToast } from "./toast.js";
 import { createSHA256 } from 'hash-wasm';
 import { nanoid } from 'nanoid';
 import { CalledEmitter } from "../composables/event-bus.js";
+import { convertCategoricalFriendsSL } from "./snow-luma-translator.js";
 
 let apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
 let wsUri = import.meta.env.VITE_WS_URI;
@@ -238,7 +239,7 @@ const fetchChangeEssenceMsg = async (message_id, set) => {
 }
 
 const fetchRecallMessage = async (message_id) => {
-  return await fetchAction('recall_msg', { message_id })
+  return await fetchAction('delete_msg', { message_id })
 }
 
 function fileToBase64(file) {
@@ -450,7 +451,7 @@ const fetchSendFileStream = async (task) => {
 };
 
 const fetchCategoricalFriends = async () => {
-  return fetchActionData('get_friends_with_category')
+  return convertCategoricalFriendsSL(await fetchActionData('get_friends_with_category'))
 }
 
 const fetchGroupList = async () => {
@@ -585,7 +586,7 @@ const NameCachesUtil = {
 
     for (const info of group_users) {
       const user_info = isObjectProp(groupObj, info.user_id, true, true);
-      ['is_robot', 'level', 'role', 'title'].forEach(prop => {
+      ['is_robot', 'level', 'role', 'title', 'card', 'nickname'].forEach(prop => {
         if (prop in info) {
           user_info[prop] = info[prop];
         }
@@ -716,7 +717,7 @@ const fetchDisplayName = async (
       let data2
       if (user_id === 'all') {
         name = data2 = '全体成员'
-      } else {
+      } else if (user_id) {
         data1 = await fetchUserInfo(user_id)
         try {
           data2 = await fetchGroupMemberInfo(group_id, user_id)
@@ -724,6 +725,8 @@ const fetchDisplayName = async (
 
         }
         name = data2?.card || data1?.remark || data2?.nickname || data1.nickname;
+      } else {
+        name = data2 = 'Invalid user'
       }
       changeName(name || `User ${user_id}`)
       NameCachesUtil.set(id, type, name, data2)

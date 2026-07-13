@@ -32,7 +32,7 @@ def convert_event_to_message_data(event):
 
     # 处理 real_seq（尝试转为 int，失败则设为 None）
     try:
-        real_seq = int(event_dict.get('real_seq'))
+        real_seq = int(event_dict.get('real_seq') or event_dict.get('message_seq'))
     except (ValueError, TypeError, AttributeError):
         real_seq = None
 
@@ -43,6 +43,18 @@ def convert_event_to_message_data(event):
     elif user_id is None and hasattr(event, 'sender'):
         user_id = getattr(event.sender, 'user_id', None)
 
+    post_type = event_dict.get('post_type')
+    message_type = event_dict.get('message_type')
+    target_id = event_dict.get('target_id')
+    group_id = event_dict.get('group_id')
+
+    if post_type in ['message', 'message_sent']:
+        if message_type == 'group':
+            if post_type == 'message_sent':
+                target_id = target_id or group_id
+        elif message_type == 'private':
+            target_id = target_id or user_id
+
     # 构造标准化的消息数据
     message_data = {
         'message_id': event_dict.get('message_id'),
@@ -50,14 +62,14 @@ def convert_event_to_message_data(event):
         'time': event_dict.get('time', int(datetime.now().timestamp())),
         'self_id': event_dict.get('self_id'),
         'sender_id': event_dict.get('sender_id'),
-        'post_type': event_dict.get('post_type'),
+        'post_type': post_type,
         'notice_type': event_dict.get('notice_type'),
-        'message_type': event_dict.get('message_type'),
+        'message_type': message_type,
         'sub_type': event_dict.get('sub_type'),
         'user_id': user_id,
-        'group_id': event_dict.get('group_id'),
+        'group_id': group_id,
         'operator_id': event_dict.get('operator_id'),
-        'target_id': event_dict.get('target_id'),
+        'target_id': target_id,
         'event': json.dumps(event_dict, ensure_ascii=False),  # 原始 event 数据转为 JSON 字符串
         'created_at': datetime.now(timezone.utc).isoformat(),
     }

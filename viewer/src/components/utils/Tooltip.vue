@@ -42,7 +42,7 @@ export default {
     placement: {
       type: String,
       default: 'top',
-      validator: value => ['top', 'left', 'right', 'bottom','tr'].includes(value)
+      validator: value => ['top', 'left', 'right', 'bottom', 'tr', 'br'].includes(value)
     },
     width: {
       type: Number,
@@ -173,6 +173,7 @@ export default {
           left: this.tipPosition.x,
           right: windowWidth - this.tipPosition.x,
           top: this.tipPosition.y,
+          bottom: this.tipPosition.y,
           height: 0,
           width: 0
         }
@@ -202,6 +203,10 @@ export default {
         case 'tr':
           this.position.left = targetRect.left + this.distanceFromTarget;
           this.position.top = targetRect.top - popoverHeight - this.distanceFromTarget;
+          break;
+        case 'br':
+          this.position.left = targetRect.left + this.distanceFromTarget;
+          this.position.top = targetRect.bottom + this.distanceFromTarget;
           break;
       }
 

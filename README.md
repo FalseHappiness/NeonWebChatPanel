@@ -1,8 +1,13 @@
 # Neon Web Chat Panel
 
-一个基于 **NapCatQQ** 与 **OneBot 11 协议** 的网页聊天面板，通过 NapCatQQ 的 WebSocket 反向连接获取消息，在前端呈现类 QQ 风格的聊天界面。
+一个基于 **OneBot 11 协议** 的网页聊天面板，通过 OneBot 兼容框架的 WebSocket 反向连接获取消息，在前端呈现类 QQ
+风格的聊天界面。
 
-> 它通过 [NapCatQQ](https://github.com/NapNeko/NapCatQQ) 的 OneBot 11 WebSocket 接口接收消息，本质上是一个 **OneBot 11 的 Web 客户端**。
+> 它通过 OneBot 11 WebSocket 接口接收消息，本质上是一个 **OneBot 11 的 Web 客户端**。
+>
+> **主要消息源：[NapCatQQ](https://github.com/NapNeko/NapCatQQ)**（推荐，功能完整、体验最佳）
+>
+> **附加消息源：[SnowLuma](https://github.com/SnowLuma/SnowLuma)**（可作为轻量替代方案，但 NapCatQQ 能提供更好的兼容性与体验）
 >
 > **重要：本项目仅限个人学习与开发测试使用，严禁用于商业目的，请勿在公开平台或群组中大量分享传播。**
 
@@ -67,27 +72,36 @@ python app.py
 |--------------------------------|---------------------------|---------------|
 | `WEB_HOST`                     | 监听地址                      | `0.0.0.0`     |
 | `WEB_PORT`                     | 监听端口                      | `58471`       |
-| `ONEBOT_WS_TOKEN`              | NapCat WebSocket 认证 Token | 无（不鉴权）        |
+| `ONEBOT_WS_TOKEN`              | NapCat / SnowLuma WebSocket 认证 Token | 无（不鉴权）        |
 | `DATABASE_FILE`                | SQLite 数据库文件路径            | `messages.db` |
 | `DOCKER_NAPCAT_NAME`           | NapCatQQ Docker 容器名       | 无             |
 | `DOCKER_NAPCAT_QQ_DATA_VOLUME` | NapCatQQ 容器数据卷路径          | 无             |
 
-### 4. 配置 NapCatQQ WebSocket 反向连接
+### 4. 配置消息源：NapCatQQ 或 SnowLuma
 
 使用浏览器打开后端地址，例如 `http://127.0.0.1:58471`，即可访问聊天面板。
 
-要让 NapCatQQ 将消息推送给本项目的后端，需要配置 NapCatQQ 的 **WebSocket 反向连接（Reverse WebSocket）**。
+要让消息源将消息推送给本项目的后端，需要配置 **WebSocket 反向连接（Reverse WebSocket）**。
 
-#### 4.1 编辑 NapCat 配置文件
+> **推荐使用 NapCatQQ**，功能更完善，体验更佳。SnowLuma 可作为轻量替代，但部分功能可能受限。
+
+#### 4.1 编辑 NapCat 配置文件（推荐）
 
 到 NapCatQQ WebUI 网络配置 添加 Websocket 客户端，名称随意，URL 填写 ws://localhost:58471/ws/napcat，开启上报自身消息，消息格式为
 Array
 
 如果后端设置了 `ONEBOT_WS_TOKEN`，需要将 `Token` 设为相同的值：
 
-#### 4.2 重启 NapCatQQ
+#### 4.1 编辑 SnowLuma 配置文件（若使用 SnowLuma）
 
-保存配置后，重启 NapCatQQ 使配置生效。NapCat 会自动连接到本项目的后端 WebSocket。终端日志中会输出类似以下信息：
+到 SnowLuma WebUI 节点配置 添加 WS 客户端，名称随意，URL 填写 ws://localhost:58471/ws/napcat，开启上报自身消息，消息格式为
+数组，角色为 Universal
+
+如果后端设置了 `ONEBOT_WS_TOKEN`，需要将 `授权Token` 设为相同的值：
+
+#### 4.2 配置生效
+
+保存并启用配置后，配置自动生效。消息源会自动连接到本项目的后端 WebSocket。本项目程序终端日志中会输出类似以下信息：
 
 ```
 OneBot connected: 1234567890
@@ -125,13 +139,15 @@ OneBot connected: 1234567890
 - **前端**: Vue 3 + Vite + Pinia
 - **数据库**: SQLite
 - **消息协议**: OneBot 11 (WebSocket)
-- **消息源**: NapCatQQ
+- **主要消息源**: NapCatQQ（推荐）
+- **附加消息源**: SnowLuma（轻量替代）
 
 ---
 
 ## 相关链接
 
-- [NapCatQQ](https://github.com/NapNeko/NapCatQQ) - 基于 OneBot 11 的 QQ 机器人框架
+- [NapCatQQ](https://github.com/NapNeko/NapCatQQ) - 基于 OneBot 11 的 QQ 机器人框架（推荐，功能完整、体验最佳）
+- [SnowLuma](https://github.com/SnowLuma/SnowLuma) - 基于 OneBot 11 的 QQ 机器人框架（轻量替代方案）
 - [OneBot 11 标准](https://github.com/botuniverse/onebot-11) - 通用聊天机器人应用接口标准
 
 ---
@@ -143,10 +159,11 @@ OneBot connected: 1234567890
 
 ## 关于项目性质与使用范围
 
-- 本项目是一个 **基于 NapCatQQ 与 OneBot 11 协议** 的网页聊天面板，**并非腾讯 QQ 的官方网页版**，也与腾讯公司无任何关联。
-- 本项目通过 NapCatQQ 提供的 OneBot 11 WebSocket 接口接收和展示消息，NapCatQQ 本身是一个第三方非官方的 QQ 机器人实现。
+- 本项目是一个 **基于 OneBot 11 协议** 的网页聊天面板，**并非腾讯 QQ 的官方网页版**，也与腾讯公司无任何关联。
+- 本项目通过 NapCatQQ 或 SnowLuma 等 OneBot 兼容框架提供的 WebSocket 接口接收和展示消息，这些框架本身是第三方非官方的 QQ 机器人实现。
 - 使用本项目意味着您理解并接受：**您正在使用第三方工具与 QQ 服务进行交互，而非腾讯官方提供的客户端或接口。**
-- **本项目仅限个人学习与开发测试使用**，**严禁用于任何商业目的**，**请勿在公开平台或群组中大量分享、传播本项目或其衍生版本**。
+- **本项目仅限个人学习与开发测试使用**，**严禁用于任何商业目的**，**请勿在公开平台或群组中大量分享、传播本项目或其衍生版本
+  **。
 - 项目仅面向有技术背景的开发者，用于学习 OneBot 协议、WebSocket 通信、Vue 前端开发等技术，不面向普通用户。
 
 ## 关于界面与图标资源
@@ -165,9 +182,9 @@ OneBot connected: 1234567890
     - 不提供用户身份认证、访问控制等安全机制。
 - **请勿用于传输任何敏感、隐私或机密信息**。因使用本项目导致的数据泄露、丢失或滥用，开发者不承担任何责任。
 
-## 关于 NapCatQQ 与腾讯风控
+## 关于 NapCatQQ / SnowLuma 与腾讯风控
 
-- 本项目通过 NapCatQQ 接口与 QQ 服务交互，该接口为第三方非官方实现，**存在被腾讯封禁、限制或终止服务的风险**。
+- 本项目通过 NapCatQQ 或 SnowLuma 等第三方接口与 QQ 服务交互，这些接口为第三方非官方实现，**存在被腾讯封禁、限制或终止服务的风险**。
 - 使用本项目的 QQ 账号、设备可能面临**风控处罚（如限制登录、功能禁用、甚至永久封号等）**，请自行评估风险并承担后果。
 - 开发者**不对任何账号封禁、功能限制或其他腾讯处罚措施负责**，亦不提供任何绕过风控的保证。
 - 建议使用**小号或测试账号**进行体验，切勿使用主账号或包含重要信息的账号。

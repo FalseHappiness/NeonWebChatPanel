@@ -24,6 +24,7 @@ import MultiMsg from "../components/MessageTypes/MessageJSON/MultiMsg.vue";
 import FeedLua from "../components/MessageTypes/MessageJSON/FeedLua.vue";
 import ContactLua from "../components/MessageTypes/MessageJSON/ContactLua.vue";
 import LottieDot from "../components/utils/LottieDot.vue";
+import { convertNoticeSL } from "./snow-luma-translator.js";
 
 
 const formatTime = (message) => {
@@ -541,7 +542,7 @@ const parseNoticePreview = (notice, returnPromise = false) => {
   const promises = []
   let children = []
   try {
-    const event = typeof notice === 'string' ? JSON.parse(notice) : notice;
+    const event = convertNoticeSL(typeof notice === 'string' ? JSON.parse(notice) : notice);
     if (event.sub_type === 'poke') {
       const raw_info = event.raw_info
       if (raw_info && Array.isArray(raw_info)) {
@@ -691,7 +692,7 @@ const createNoticeExecuteCommand = (type, arg2, arg3, arg4) => {
 const parseNotice = notice => {
   let children = []
   try {
-    const event = JSON.parse(notice.event);
+    const event = convertNoticeSL(JSON.parse(notice.event));
     if (event.sub_type === 'poke') {
       const raw_info = event.raw_info
       if (raw_info && Array.isArray(raw_info)) {

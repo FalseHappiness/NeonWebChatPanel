@@ -257,4 +257,4 @@ class OneBotConnectionManager:
 class ActionFailed(Exception):
     def __init__(self, data: Dict[str, Any]):
         self.data = data
-        super().__init__(f"Action failed: {data.get('message', 'Unknown error')}")
+        super().__init__(f"Action failed: {data.get('message', data.get('wording', 'Unknown error'))}")

@@ -16,6 +16,7 @@ import { useGlobalStore } from "../store/global.js";
 import { sortGroupUsers } from "../utils/others.js";
 import Tooltip from "./utils/Tooltip.vue";
 import ColorSvg from "./utils/ColorSvg.vue";
+import { Emitter } from "../composables/event-bus.js";
 
 const props = defineProps({
   activeContact: Object,
@@ -412,6 +413,44 @@ const handleEnterBlur = (e) => {
   }
 }
 
+const handleClickShowContactInfo = (e, user_id) => {
+  let group_user, user, group;
+  if (user_id) {
+    if (isGroup?.value) {
+      // noinspection EqualityComparisonWithCoercionJS
+      group_user = {
+        ...groupUsers.value?.find(user => user.qq == user_id),
+        user_id,
+        group_id: props.activeContact.contact_id
+      }
+    } else {
+      user = {
+        user_id,
+        nickname: props.activeContact?.real_name,
+        remark: props.activeContact?.remark
+      }
+    }
+  } else {
+    if (isGroup?.value) {
+      group = {
+        group_id: props.activeContact?.contact_id,
+        group_name: props.activeContact?.real_name,
+        group_remark: props.activeContact?.remark
+      }
+    } else {
+      user = {
+        user_id: props.activeContact?.contact_id,
+        nickname: props.activeContact?.real_name,
+        remark: props.activeContact?.remark
+      }
+    }
+  }
+  Emitter.emit("show-contact-info", {
+    group_user, user, group,
+    position: { x: e.clientX, y: e.clientY },
+  })
+}
+
 const initContactInfo = () => {
   // 组件挂载时获取名称
   getName()
@@ -443,7 +482,7 @@ onMounted(initContactInfo)
       <span class="chat-area-head-name" :class="{'text-error': isError}">
         <img class="chat-area-go-back-btn" alt="" src="/QQ/icons/arrow_left_24.svg"
              @click="() => { selectContact(null) }">
-        {{ displayName }}
+        <span class="chat-area-head-display-name" @click="handleClickShowContactInfo">{{ displayName }}</span>
         <span v-if="tempSession">&nbsp;</span>
         <small class="text-muted" v-if="tempSession" style="font-size: 100%">
           {{ tempSession }}
@@ -550,6 +589,7 @@ onMounted(initContactInfo)
           @get-essence-msg-real-seq-list="() => {emit('get-essence-msg-real-seq-list')}"
           @change-essence-msg="(real_seq, set) => {emit('change-essence-msg', real_seq, set)}"
           @quote-message="(msg, user) => {quoteMessage(msg, user)}"
+          @click-show-contacts-info="handleClickShowContactInfo"
         />
       </template>
       <template #empty="{ initializing }">
@@ -878,6 +918,20 @@ onMounted(initContactInfo)
 .scroll-to-bottom-btn:active {
   border: 1px solid #dddddd;
   background-color: #e6e6e6;
+}
+
+.chat-area-head-display-name {
+  cursor: default;
+  padding: 0 3px;
+  border-radius: 5px;
+}
+
+.chat-area-head-display-name:hover {
+  background-color: #EBEBEB;
+}
+
+.chat-area-head-display-name:active {
+  background-color: #e0e0e0;
 }
 </style>
 

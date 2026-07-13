@@ -14,6 +14,7 @@ import { showErrorToast, showToast } from "./utils/toast.js";
 import { destroyContextMenu, initContextMenu } from "./utils/context-menu.js";
 import "./App.css"
 import { CalledEmitter } from "./composables/event-bus.js";
+import ContactInfoTooltip from "./components/utils/ContactInfoTooltip.vue";
 
 const contacts = ref([])
 const loadingContacts = ref(false)
@@ -385,6 +386,7 @@ onUnmounted(() => {
       @set-real-contact-name="setRealContactName"
       @change-group-contact-remark="changeGroupContactRemark"
     />
+    <ContactInfoTooltip/>
   </div>
 </template>
 

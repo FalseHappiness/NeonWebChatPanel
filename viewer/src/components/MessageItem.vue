@@ -36,7 +36,11 @@ const props = defineProps({
 
 const global = useGlobalStore()
 
-const emit = defineEmits(['get-essence-msg-real-seq-list', 'change-essence-msg', 'quote-message'])
+const emit = defineEmits([
+  'get-essence-msg-real-seq-list',
+  'change-essence-msg',
+  'quote-message',
+  'click-show-contacts-info'])
 
 const noticeContainer = ref(null)
 const messageContent = ref(null)
@@ -214,7 +218,7 @@ const handleAvatarDoubleClick = {
     }])
   },
   singleClick: e => {
-    // console.log('single click', e)
+    emit("click-show-contacts-info", e, props.message.user_id)
   }
 }
 
@@ -267,7 +271,7 @@ const customContextMenu = () => {
           const set = !isEssence.value
           settingEssence.value = true
           const result = await fetchChangeEssenceMsg(props.message.message_id, set)
-          if (result.status === 'ok' && result?.data?.result?.errorCode === 0) {
+          if (result.status === 'ok' && (!result?.data || result?.data?.result?.errorCode === 0)) {
             showToast('success', set ? '设置群精华成功' : "该消息已被移除群精华")
             emit('change-essence-msg', props.message.real_seq, set)
           } else {
@@ -343,7 +347,7 @@ const handleNoticeExecuteCommand = e => {
     if (typeof command === 'string') {
       const jumpToMsg = 'jump-to-msg-'
       const openEssence = 'open-essence-window'
-      const viewUserInfo = 'view-user-info'
+      const viewUserInfo = 'view-user-info-'
       if (command.startsWith(jumpToMsg)) {
         const msg = element.jumpToMsg
         if (msg === undefined) {
@@ -356,7 +360,7 @@ const handleNoticeExecuteCommand = e => {
       } else if (command === openEssence) {
 
       } else if (command.startsWith(viewUserInfo)) {
-
+        emit("click-show-contacts-info", e, command.substring(viewUserInfo.length))
       }
     }
   }

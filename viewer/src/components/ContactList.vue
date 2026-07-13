@@ -4,6 +4,7 @@ import ContactItem from './ContactItem.vue'
 import VueResizable from 'vue-resizable';
 import VirtualScroller from "./utils/VirtualScroller.vue";
 import { fetchSetLongNick, getUserLogo } from "../utils/backend-api.js";
+import { Emitter } from "../composables/event-bus.js";
 
 const props = defineProps({
   contacts: Array,
@@ -49,6 +50,13 @@ const handleChangeLongNick = async () => {
   }
 }
 
+const handleShowSelfInfo = e => {
+  Emitter.emit("show-contact-info", {
+    position: { x: e.clientX, y: e.clientY },
+    user: props.selfInfo
+  })
+}
+
 onMounted(() => {
   selfLongNickModel.value = props.selfInfo?.long_nick || ""
 })
@@ -65,7 +73,7 @@ onMounted(() => {
   >
     <div class="contacts-top-side">
       <div class="self-info-container" v-if="selfInfo">
-        <img alt="" :src="getUserLogo(selfInfo.user_id)" class="self-info-logo">
+        <img alt="" :src="getUserLogo(selfInfo.user_id)" class="self-info-logo" @click="handleShowSelfInfo">
         <div class="self-info-card">
           <span class="self-info-nickname">{{ selfInfo.nickname }}</span>
           <input placeholder="编辑个性签名"

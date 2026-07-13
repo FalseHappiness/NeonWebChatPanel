@@ -246,8 +246,10 @@ async def get_messages_core(params: dict):
 
         for idx, msg in enumerate(temp_merged_messages):
             # 如果有 real_seq，就用它作为键（重复时后面的覆盖前面的）
-            if 'real_seq' in msg and msg['real_seq'] is not None:
-                old_msg = merged.get(msg['real_seq'])
+            real_seq = msg.get("real_seq", None) or msg.get("message_seq", None)
+            if ('real_seq' in msg or 'message_seq' in msg) and real_seq is not None:
+                msg['real_seq'] = real_seq
+                old_msg = merged.get(real_seq)
                 if isinstance(msg, dict):
                     event = msg.get('event')
                     if isinstance(event, str):
@@ -273,7 +275,7 @@ async def get_messages_core(params: dict):
                                     event['recall_operator'] = -1
                                     msg['event'] = json.dumps(event)
                             else:
-                                db_message = event.get('message')
+                                db_message = event.get('message', [])
                                 if len(old_message) == len(db_message):
                                     for i in range(len(old_message)):
                                         old_msg_data = old_message[i].get('data')
@@ -285,7 +287,7 @@ async def get_messages_core(params: dict):
                         except json.JSONDecodeError:
                             pass
 
-                merged[msg['real_seq']] = msg
+                merged[real_seq] = msg
             # 如果没有 real_seq，就用 (time, idx) 作为键（确保唯一性）
             else:
                 merged[(msg['time'], idx)] = msg
@@ -409,14 +411,18 @@ async def get_contacts_core():
 async def _req_backend_messages(params: dict):
     return await get_messages_core(params)
 
+
 async def _req_backend_get_msg(params: dict):
     return await get_msg_core(params)
+
 
 async def _req_backend_sync(params: dict):
     return await sync_messages_core(params)
 
+
 async def _req_backend_contacts(params: dict):
     return await get_contacts_core()
+
 
 frontend_manager.req_backend_handlers = {
     'contacts': _req_backend_contacts,
