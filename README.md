@@ -1,4 +1,4 @@
-# Neon Web Chat Panel
+# Qireno Web Chat Panel
 
 一个基于 **OneBot 11 协议** 的网页聊天面板，通过 OneBot 兼容框架的 WebSocket 反向连接获取消息，在前端呈现类 QQ
 风格的聊天界面。
@@ -18,8 +18,8 @@
 ### 1. 克隆项目
 
 ```bash
-git clone https://github.com/FalseHappiness/NeonWebChatPanel.git
-cd NeonWebChatPanel
+git clone https://github.com/FalseHappiness/QirenoWebChat.git
+cd QirenoWebChat
 ```
 
 ### 2. 构建前端

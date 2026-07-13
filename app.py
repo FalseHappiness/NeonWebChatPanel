@@ -38,7 +38,7 @@ config = Config()
 db = Database(config.DATABASE_FILE)
 
 # 创建FastAPI应用
-app = FastAPI(title="Neon Web QQNT")
+app = FastAPI(title="Qireno Web Chat")
 
 # 添加CORS中间件
 app.add_middleware(
