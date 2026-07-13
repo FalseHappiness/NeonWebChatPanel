@@ -485,6 +485,10 @@ const fetchSetLongNick = async (longNick) => {
   return await fetchAction('set_self_longnick', { longNick })
 }
 
+const fetchRemainGroupAtAll = async (group_id) => {
+  return await fetchActionData('get_group_at_all_remain', { group_id })
+}
+
 const isObject = (variable) => {
   return typeof variable === 'object' && !Array.isArray(variable);
 };
@@ -832,5 +836,6 @@ export {
   getUserLogo,
   fetchStrangerInfo,
   fetchSetLongNick,
-  fetchSyncMessages
+  fetchSyncMessages,
+  fetchRemainGroupAtAll
 }

@@ -43,3 +43,9 @@
 .height-100 {
     height: 100% !important
 }
+
+.text-truncate {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}

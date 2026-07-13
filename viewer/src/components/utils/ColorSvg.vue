@@ -4,7 +4,8 @@ import { defineComponent } from 'vue'
 export default defineComponent({
   name: "ColorSvg",
   props: {
-    src: String
+    src: String,
+    size: { type: Number, default: 100 }
   },
   computed: {
     svg() {
@@ -18,11 +19,17 @@ export default defineComponent({
   <div :style="{
     maskImage: `url(${src})`,
     '-webkit-mask-image': `url(${src})`,
-    maskSize: '100% 100%'
-  }" ref="svg">
+    maskSize: `${size}% ${size}%`,
+    '-webkit-mask-size': `${size}% ${size}%`,
+  }" ref="svg" class="color-svg">
   </div>
 </template>
 
 <style scoped>
-
+.color-svg {
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+}
 </style>

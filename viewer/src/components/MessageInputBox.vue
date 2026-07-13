@@ -8,7 +8,7 @@ import Tooltip from "./utils/Tooltip.vue";
 import { useGlobalStore } from "../store/global.js";
 import {
   fetchDisplayName,
-  fetchForwardSingleMsg,
+  fetchForwardSingleMsg, fetchRemainGroupAtAll,
   fetchSendFiles,
   fetchSendFileStream,
   fetchSendMessage,
@@ -70,7 +70,8 @@ export default defineComponent({
       messageIdToForward: undefined,
       messageContentToForward: undefined,
       filesUploadTasks: [],
-      showFilesUploadTasks: false
+      showFilesUploadTasks: false,
+      remainGroupAtAll: undefined
     }
   },
   mounted() {
@@ -1775,9 +1776,14 @@ export default defineComponent({
       if (!this.atGroupUsers) {
         return null;
       }
+      const atGroupUsers = [...this.atGroupUsers]
+
+      if (this.remainGroupAtAll?.can_at_all) {
+        atGroupUsers.unshift({ qq: 'all', name: '全体成员' })
+      }
 
       if (!this.atMentionText) {
-        return this.atGroupUsers;
+        return atGroupUsers;
       }
 
       const searchText = this.atMentionText.toLowerCase();
@@ -1787,7 +1793,7 @@ export default defineComponent({
       const pinyinMatches = [];
       const qqMatches = [];
 
-      this.atGroupUsers.forEach(user => {
+      atGroupUsers.forEach(user => {
         // 直接匹配 name
         if (user.name.toLowerCase().includes(searchText)) {
           directMatches.push(user);
@@ -1814,7 +1820,7 @@ export default defineComponent({
     currentFilesUploadTasks() {
       return this.filesUploadTasks.filter(task => {
         const { type, contact_id } = task.contact;
-        return type === this.activeContact.type && contact_id === this.activeContact.contact_id;
+        return type === this.activeContact?.type && contact_id === this.activeContact?.contact_id;
       });
     }
 
@@ -1822,6 +1828,18 @@ export default defineComponent({
   watch: {
     filteredAtGroupUsers() {
       this.selectedAtIndex = 0;
+    },
+    activeContact(newVal, oldVal) {
+      if (oldVal?.type !== newVal?.type || oldVal?.contact_id !== newVal?.contact_id) {
+        this.remainGroupAtAll = undefined
+      }
+    },
+    async atInputPosition(val) {
+      if (this.isGroup && val) {
+        this.remainGroupAtAll = await fetchRemainGroupAtAll(this.activeContact.contact_id)
+      } else {
+        this.remainGroupAtAll = undefined
+      }
     }
   }
 });
@@ -1859,7 +1877,18 @@ export default defineComponent({
                 @mouseenter="handleMouseEnterAtUser(index)"
                 @click="handleSelectAtUser(item)"
               >
-                <div class="at-group-user">
+                <div class="at-group-user" v-if="item.qq === 'all'">
+                  <div class="at-group-user-name">
+                    <div class="at-group-all-members-icon-background">
+                      <ColorSvg class="at-group-all-members-icon" src="/QQ/icons/at_24.svg" :size="65"></ColorSvg>
+                    </div>
+                    <span class="text-truncate">全体成员</span>
+                  </div>
+                  <span class="at-group-user-qq">剩余 {{
+                      remainGroupAtAll?.remain_at_all_count_for_uin ?? "?"
+                    }} 次</span>
+                </div>
+                <div class="at-group-user" v-else>
                   <div class="at-group-user-name">
                     <img alt="" :src="`https://q1.qlogo.cn/g?b=qq&nk=${item.qq}&s=40`">
                     <span class="text-truncate">{{ item.name }}</span>
@@ -2250,12 +2279,13 @@ export default defineComponent({
   overflow: hidden;
 }
 
-.at-group-user-name img {
+.at-group-user-name img, .at-group-all-members-icon-background {
   width: 20px;
   height: 20px;
   border-radius: 100%;
   margin: 0 5px 0 3px;
 }
+
 
 .at-group-user-name span {
   flex: 1;
@@ -2264,6 +2294,16 @@ export default defineComponent({
 .at-group-user-qq {
   color: gray;
   font-size: 12px;
+}
+
+.at-group-all-members-icon {
+  width: 20px;
+  height: 20px;
+  background-color: white;
+}
+
+.at-group-all-members-icon-background {
+  background-color: #0099ff;
 }
 </style>
 
