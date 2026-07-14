@@ -40,7 +40,9 @@ const emit = defineEmits([
   'get-essence-msg-real-seq-list',
   'change-essence-msg',
   'quote-message',
-  'click-show-contacts-info'])
+  'click-show-contacts-info',
+  'change-show-group-notice'
+])
 
 const noticeContainer = ref(null)
 const messageContent = ref(null)
@@ -372,8 +374,11 @@ const handleMessageExecuteCommand = e => {
     const command = element.dataset.command
     if (typeof command === 'string') {
       const atSomebody = 'at-somebody'
+      const showGroupNotice = 'show-group-notice'
       if (command === atSomebody) {
         Emitter.emit("input-at-somebody", element.dataset.userId, element.dataset.displayName)
+      } else if (command === showGroupNotice) {
+        emit("change-show-group-notice")
       }
     }
   }

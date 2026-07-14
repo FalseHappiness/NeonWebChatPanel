@@ -23,28 +23,14 @@ import MultiMsg from "../components/MessageTypes/MessageJSON/MultiMsg.vue";
 import FeedLua from "../components/MessageTypes/MessageJSON/FeedLua.vue";
 import ContactLua from "../components/MessageTypes/MessageJSON/ContactLua.vue";
 import LottieDot from "../components/utils/LottieDot.vue";
-import { parseJSON } from "./others.js";
-
+import { formatTimeOptions, parseJSON } from "./others.js";
 
 const formatTime = (message) => {
   if (!message?.time) return
 
-  const date = new Date(message.time * 1000)
-  const now = new Date()
-
-  // 检查是否是今年
-  const showYear = date.getFullYear() !== now.getFullYear()
-
-  // 格式化日期时间
-  const year = showYear ? date.getFullYear() + '-' : ''
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  const hours = String(date.getHours()).padStart(2, '0')
-  const minutes = String(date.getMinutes()).padStart(2, '0')
-  const seconds = String(date.getSeconds()).padStart(2, '0')
-
-  // 组合成最终格式
-  return `${year}${month}-${day} ${hours}:${minutes}:${seconds}`
+  return formatTimeOptions({
+    timestamp: message.time
+  })
 }
 
 function convertMessageTextHTMLSyntax(text, emoji = false) {
@@ -131,7 +117,7 @@ const parseMessagePreview = (message, returnPromise = false, replyMode = false) 
     }
   }
   try {
-    const event =parseJSON(message);
+    const event = parseJSON(message);
 
     if (event.message && Array.isArray(event.message)) {
       const children = [];

@@ -1,6 +1,6 @@
 <script setup>
 import { computed, h, ref } from "vue";
-import { getMultimediaProxyUrl } from "../../../utils/backend-api.js";
+import { getGroupNoticePicUrl, getMultimediaProxyUrl } from "../../../utils/backend-api.js";
 import { Base64 } from 'js-base64'
 import { convertMessageTextHTMLSyntax } from "../../../utils/parse-message.js";
 
@@ -35,7 +35,7 @@ const images = computed(() => {
       images.push({
         height: pic.height,
         width: pic.width,
-        url: getMultimediaProxyUrl(`https://gdynamic.qpic.cn/gdynamic/${pic.url}/0`)
+        url: getMultimediaProxyUrl(getGroupNoticePicUrl(pic.url))
       })
     }
   }
@@ -61,7 +61,7 @@ const images = computed(() => {
         :style="{ '--width': image.width, '--height': image.height }"
       >
     </div>
-    <p class="find-out-more">查看详情</p>
+    <p class="find-out-more message-execute-command" data-command="show-group-notice">查看详情</p>
   </div>
 </template>
 

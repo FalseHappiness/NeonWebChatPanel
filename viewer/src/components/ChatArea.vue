@@ -17,6 +17,8 @@ import { sortGroupUsers } from "../utils/others.js";
 import Tooltip from "./utils/Tooltip.vue";
 import ColorSvg from "./utils/ColorSvg.vue";
 import { Emitter } from "../composables/event-bus.js";
+import GroupNoticesShower from "./GroupNoticesShower.vue";
+import EnterArrow from "./utils/EnterArrow.vue";
 
 const props = defineProps({
   activeContact: Object,
@@ -348,14 +350,6 @@ useGlobalStore().findMessage = msg_id => findMessage(msg_id)
 provide("findMessage", msg_id => findMessage(msg_id))
 
 
-// 联系人更改时获取名称
-watch(() => props.activeContact, (newVal, oldVal) => {
-  if (newVal?.contact_id !== oldVal?.contact_id || newVal?.type !== oldVal?.type) {
-    groupUsers.value = null
-  }
-  initContactInfo();
-}, { deep: true })
-
 const isGroup = computed(() => {
   return props.activeContact?.type === 'group';
 })
@@ -451,6 +445,12 @@ const handleClickShowContactInfo = (e, user_id) => {
   })
 }
 
+const showGroupNoticesViewer = ref(false);
+
+const changeShowGroupNotice = (isShow = true) => {
+  showGroupNoticesViewer.value = isShow;
+}
+
 const initContactInfo = () => {
   // 组件挂载时获取名称
   getName()
@@ -458,14 +458,34 @@ const initContactInfo = () => {
     groupRemarkModel.value = props.activeContact?.remark;
     getGroupNotice()
     getGroupSelfInfo()
+    Emitter.on("show-group-notices", changeShowGroupNotice)
   }
 }
 
+// 联系人更改时获取名称
+watch(() => props.activeContact, (newVal, oldVal) => {
+  if (newVal?.contact_id !== oldVal?.contact_id || newVal?.type !== oldVal?.type) {
+    groupUsers.value = null
+    showGroupNoticesViewer.value = false
+    initContactInfo();
+  }
+}, { deep: true })
+
 onMounted(initContactInfo)
+onUnmounted(() => {
+  Emitter.off("show-group-notices")
+})
 </script>
 
 <template>
   <div class="chat-area" :class="{ 'active-contact': activeContact }">
+    <GroupNoticesShower
+      v-if="showGroupNoticesViewer"
+      :group_id="activeContact?.contact_id"
+      :notices="groupNotifications || []"
+      :onClose="() => changeShowGroupNotice(false)"
+    />
+
     <div class="cannot-drag window-controls" v-if="false">
       <div class="window-control-btn window-control-minimize">
         <img src="/static/assets/Minimize.svg" alt="" class="no-user-select">
@@ -522,13 +542,15 @@ onMounted(initContactInfo)
         群聊成员
       </div>
 
-      <div class="chat-area-contact-more-area with-title" data-title="群公告">
+      <div class="chat-area-contact-more-area with-title display-flex" data-title="群公告"
+           @click="changeShowGroupNotice()">
         <span v-if="groupNotifications == null" style="color: #999;">内容获取中</span>
         <span v-else-if="!groupNotifications?.length" style="color: #999;">未设置</span>
         <span v-else class="overflow-ellipsis">
           <span v-if="latestGroupNoticeMsg?.image?.length">【图片】</span>
           <span v-html="latestGroupNoticeMsg.text"></span>
         </span>
+        <EnterArrow/>
       </div>
 
       <label
@@ -539,6 +561,7 @@ onMounted(initContactInfo)
                @blur="handleGroupSelfRemarkChange"
                @keydown="handleEnterBlur"
                type="text"
+               class="overflow-ellipsis"
                placeholder="填写我的本群昵称">
       </label>
 
@@ -590,6 +613,7 @@ onMounted(initContactInfo)
           @change-essence-msg="(real_seq, set) => {emit('change-essence-msg', real_seq, set)}"
           @quote-message="(msg, user) => {quoteMessage(msg, user)}"
           @click-show-contacts-info="handleClickShowContactInfo"
+          @change-show-group-notice="changeShowGroupNotice"
         />
       </template>
       <template #empty="{ initializing }">
@@ -738,6 +762,11 @@ onMounted(initContactInfo)
   margin: 0;
 }
 
+.chat-area-contact-more-area.display-flex {
+  display: flex;
+  align-items: center;
+}
+
 
 .chat-area-contact-more-area.with-title {
   margin-top: 18px;
@@ -750,6 +779,11 @@ onMounted(initContactInfo)
   margin-top: -32px;
   color: gray;
   font-size: 14px;
+  pointer-events: none;
+}
+
+.chat-area-contact-more-area.display-flex.with-title:before {
+  margin-top: -64px;
 }
 
 .chat-area-contact-logo {
@@ -772,6 +806,7 @@ onMounted(initContactInfo)
 .chat-area-contact-more-area.input-content input {
   outline: none;
   border: none;
+  width: 100%;
 }
 
 .chat-area-contact-more-area.input-content:has(input:focus) {

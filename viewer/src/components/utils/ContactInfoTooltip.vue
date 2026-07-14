@@ -10,10 +10,11 @@ import {
   getUserLogo
 } from "../../utils/backend-api.js";
 import { nanoid } from "nanoid";
+import EnterArrow from "./EnterArrow.vue";
 
 export default defineComponent({
   name: "ContactInfoTooltip",
-  components: { Tooltip },
+  components: { EnterArrow, Tooltip },
   data() {
     return {
       group_user: null,
@@ -84,6 +85,10 @@ export default defineComponent({
       if (!e?.target?.closest(".contact-info-tooltip") && (Date.now() - this.showTime) > 300) {
         this.disappear()
       }
+    },
+    showGroupNotices() {
+      Emitter.emit("show-group-notices")
+      this.disappear()
     }
   },
   mounted() {
@@ -153,9 +158,12 @@ export default defineComponent({
             </div>
             <div class="row" v-if="latestGroupNotice">
               <div class="label">群公告</div>
-              <div class="value clickable overflow-ellipsis">
+              <div class="value clickable overflow-ellipsis with-arrow" @click="showGroupNotices">
+                <span class="overflow-ellipsis">
                 <span v-if="latestGroupNotice?.image?.length">【图片】</span>
                 <span v-html="latestGroupNotice.text"></span>
+                </span>
+                <EnterArrow :size="18"/>
               </div>
             </div>
           </div>
@@ -233,6 +241,11 @@ export default defineComponent({
   flex: 1;
   border-radius: 5px;
   color: black;
+}
+
+.contact-info-details .value.with-arrow {
+  display: flex;
+  align-items: center;
 }
 
 .contact-info-details .value.clickable:hover {

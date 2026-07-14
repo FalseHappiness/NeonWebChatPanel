@@ -63,7 +63,7 @@ const formatRelativeTime = (timeStr, alwaysHm) => {
     // 今天：返回时间 HH:mm
     return HH_mm;
   } else if (inputDate >= yesterdayStart) {
-    // 昨天：返回"昨天 HH:MM"
+    // 昨天：返回"昨天 HH:mm"
     return `昨天 ${HH_mm}`;
   } else if (inputDate >= weekStart) {
     // 本周：返回星期几
@@ -214,10 +214,78 @@ function stringifyJSON(json) {
   return isString(json) ? json : JSON.stringify(json)
 }
 
+/**
+ * 格式化秒级时间戳
+ * @param {number} timestamp - 秒级时间戳
+ * @param {string} [delimiter1='-'] - 日期分隔符
+ * @param {string} [delimiter2=' '] - 日期与时间分隔符
+ * @param {string} [delimiter3=':'] - 时分秒分隔符
+ * @param {boolean} [showHm=true] - 是否显示时分
+ * @param {boolean} [showSecond=true] - 是否显示秒
+ * @param {boolean} [alwaysMD=true] - 是否始终显示月日
+ * @param {boolean} [alwaysYear=false] - 是否始终显示年份
+ * @returns {string|undefined} 格式化后的时间字符串
+ */
+const formatTimeOptions = ({
+                             timestamp,
+                             delimiter1 = '-',
+                             delimiter2 = ' ',
+                             delimiter3 = ':',
+                             showHm = true,
+                             showSecond = true,
+                             alwaysMD = true,
+                             alwaysYear = false,
+                           }) => {
+  if (!Number.isInteger(timestamp)) return;
+
+  const date = new Date(timestamp * 1000);
+  const now = new Date();
+
+  // 判断是否是同一天
+  const isToday = (
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate()
+  );
+  // 是否显示年份
+  const showYear = alwaysYear || date.getFullYear() !== now.getFullYear();
+  // 是否显示月日
+  let showMD = alwaysMD;
+  if (!alwaysMD) {
+    showMD = !isToday; // 非今天才显示月日，今天只显示时间
+  }
+
+  // 基础字段补零
+  const year = showYear ? `${date.getFullYear()}${delimiter1}` : '';
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  const seconds = String(date.getSeconds()).padStart(2, '0');
+
+  // 日期部分拼接
+  let dateStr = '';
+  if (showMD) {
+    dateStr = `${year}${month}${delimiter1}${day}${delimiter2}`;
+  }
+
+  // 时间部分拼接
+  let timeStr = '';
+  if (showHm) {
+    timeStr = `${hours}${delimiter3}${minutes}`;
+    if (showSecond) {
+      timeStr += `${delimiter3}${seconds}`;
+    }
+  }
+
+  return `${dateStr}${timeStr}`;
+};
+
 export {
   hasMouseSupport,
   formatRelativeTime,
   sortGroupUsers,
   parseJSON,
-  stringifyJSON
+  stringifyJSON,
+  formatTimeOptions
 }

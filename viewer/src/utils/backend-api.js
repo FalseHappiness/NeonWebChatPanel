@@ -809,6 +809,9 @@ const getUserLogo = (user_id, size = 100) => {
   return `https://q1.qlogo.cn/g?b=qq&nk=${user_id}&s=${size}`
 }
 
+const getGroupNoticePicUrl = (pic_url) => {
+  return `https://gdynamic.qpic.cn/gdynamic/${pic_url}/0`
+}
 
 export {
   fetchDisplayName,
@@ -847,5 +850,6 @@ export {
   fetchStrangerInfo,
   fetchSetLongNick,
   fetchSyncMessages,
-  fetchRemainGroupAtAll
+  fetchRemainGroupAtAll,
+  getGroupNoticePicUrl
 }
