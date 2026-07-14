@@ -81,7 +81,7 @@ export default defineComponent({
       this.position = position
     },
     documentClick(e) {
-      if (!e?.target?.closest(".contact-info-tooltip") && (Date.now() - this.showTime) > 1000) {
+      if (!e?.target?.closest(".contact-info-tooltip") && (Date.now() - this.showTime) > 300) {
         this.disappear()
       }
     }
