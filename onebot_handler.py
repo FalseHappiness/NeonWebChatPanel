@@ -183,10 +183,11 @@ class OneBotHandler:
         params = {
             "count": count,
             "message_seq": message_id,
+            "message_id": message_id,  # SnowLuma
             ("group_id" if type == "group" else "user_id"): id
         }
         if direction is not None:
-            params['reverseOrder'] = direction == 'prev'
+            params['reverse_order'] = direction == 'prev'
         action = "get_group_msg_history" if type == "group" else "get_friend_msg_history"
 
         # print(action, params)
@@ -201,17 +202,17 @@ class OneBotHandler:
             return messages[:count]
 
         # 检查是否已经获取了所有消息（只返回1条且与传入的message_id相同）
-        if len(messages) == 0 or (len(messages) == 1 and messages[0]["message_seq"] == message_id):
+        if len(messages) == 0 or (len(messages) == 1 and messages[0]["message_id"] == message_id):
             return messages
 
         # 计算还需要获取的消息数量
         remaining = count - len(messages)
 
-        # 确定下一次请求的message_seq
+        # 确定下一次请求的message_id
         if direction == 'prev':
-            next_message_id = messages[0]["message_seq"]  # 取最早的一条
+            next_message_id = messages[0]["message_id"]  # 取最早的一条
         else:
-            next_message_id = messages[-1]["message_seq"]  # 取最新的一条
+            next_message_id = messages[-1]["message_id"]  # 取最新的一条
 
         # 递归获取剩余的消息（remaining + 1 是为了避免重复）
         remaining_messages = await self.get_messages(

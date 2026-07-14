@@ -29,6 +29,8 @@ const convertMessageSL = event => {
   event = parseJSON(event);
   if (["message", "message_sent"].includes(event.post_type)) {
     const message = { ...event }
+    // NapCatQQ: message_seq=message_id, real_seq 为序列号（顺序递增）
+    // SnowLuma: message_id 为消息 id, message_seq 相当于 NapCatQQ 的 real_seq
     if (!message.hasOwnProperty("real_seq")) {
       if (message.hasOwnProperty("message_seq")) {
         message.real_seq = message.message_seq

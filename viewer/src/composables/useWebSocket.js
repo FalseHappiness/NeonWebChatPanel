@@ -65,7 +65,7 @@ export function useWebSocket(url, { onMessage, onNewContact, onNotice }) {
    * @param {number} timeout - 超时时间(毫秒)
    * @returns {Promise<any>} action 响应数据
    */
-  const sendAction = (action, params = {}, signal = undefined, timeout = 300000) => {
+  const sendAction = (action, params = {}, signal = undefined, timeout = 600000) => {
     return new Promise((resolve, reject) => {
       if (!socket.value || socket.value.readyState !== WebSocket.OPEN) {
         reject(new Error('WebSocket is not connected'))
@@ -138,7 +138,7 @@ export function useWebSocket(url, { onMessage, onNewContact, onNotice }) {
    * @param {number} timeout - 超时时间(毫秒)
    * @returns {Promise<any>} 后端响应数据
    */
-  const reqBackend = (endpoint, params = {}, signal = undefined, timeout = 300000) => {
+  const reqBackend = (endpoint, params = {}, signal = undefined, timeout = 600000) => {
     return new Promise((resolve, reject) => {
       if (!socket.value || socket.value.readyState !== WebSocket.OPEN) {
         reject(new Error('WebSocket is not connected'))
