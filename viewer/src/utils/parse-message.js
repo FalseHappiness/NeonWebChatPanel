@@ -1,4 +1,4 @@
-import { computed, h, inject, ref } from "vue";
+import { h } from "vue";
 import {
   fetchDisplayName,
   getCacheName,
@@ -18,13 +18,12 @@ import ReplyMessage from "../components/MessageTypes/ReplyMessage.vue";
 import ViewNews from "../components/MessageTypes/MessageJSON/ViewNews.vue";
 import ForwardMessage from "../components/MessageTypes/ForwardMessage.vue";
 import ShakePokeMessage from "../components/MessageTypes/ShakePokeMessage.vue";
-import LottieCanvas from "../components/utils/LottieCanvas.vue";
 import LoadingImage from "../components/utils/LoadingImage.vue";
 import MultiMsg from "../components/MessageTypes/MessageJSON/MultiMsg.vue";
 import FeedLua from "../components/MessageTypes/MessageJSON/FeedLua.vue";
 import ContactLua from "../components/MessageTypes/MessageJSON/ContactLua.vue";
 import LottieDot from "../components/utils/LottieDot.vue";
-import { convertNoticeSL } from "./snow-luma-translator.js";
+import { parseJSON } from "./others.js";
 
 
 const formatTime = (message) => {
@@ -132,7 +131,7 @@ const parseMessagePreview = (message, returnPromise = false, replyMode = false) 
     }
   }
   try {
-    const event = typeof message === 'string' ? JSON.parse(message) : message;
+    const event =parseJSON(message);
 
     if (event.message && Array.isArray(event.message)) {
       const children = [];
@@ -284,7 +283,7 @@ const parseMessagePreview = (message, returnPromise = false, replyMode = false) 
 
 const parseMessage = (message) => {
   try {
-    const event = JSON.parse(message.event);
+    const event = parseJSON(message.event);
     if (event.message && Array.isArray(event.message)) {
       const children = [];
 
@@ -542,7 +541,7 @@ const parseNoticePreview = (notice, returnPromise = false) => {
   const promises = []
   let children = []
   try {
-    const event = convertNoticeSL(typeof notice === 'string' ? JSON.parse(notice) : notice);
+    const event = parseJSON(notice);
     if (event.sub_type === 'poke') {
       const raw_info = event.raw_info
       if (raw_info && Array.isArray(raw_info)) {
@@ -692,7 +691,7 @@ const createNoticeExecuteCommand = (type, arg2, arg3, arg4) => {
 const parseNotice = notice => {
   let children = []
   try {
-    const event = convertNoticeSL(JSON.parse(notice.event));
+    const event = parseJSON(notice.event);
     if (event.sub_type === 'poke') {
       const raw_info = event.raw_info
       if (raw_info && Array.isArray(raw_info)) {

@@ -14,7 +14,7 @@ import { useGlobalStore } from "../store/global.js";
 import GroupLevelTitle from "./GroupLevelTitle.vue";
 import { basicContextItem, contextDividedItem, formatBasicContextItems, vCustomMenu } from "../utils/context-menu.js";
 import { vDoubleClick } from '../directives/double-click-directive.js';
-import { formatRelativeTime } from "../utils/others.js";
+import { formatRelativeTime, parseJSON } from "../utils/others.js";
 import { showToast } from "../utils/toast.js";
 import { Emitter } from "../composables/event-bus.js";
 
@@ -317,7 +317,7 @@ const customContextMenu = () => {
 
 const isRecalled = computed(() => {
   const message = props.message
-  const event = typeof message.event === 'string' ? JSON.parse(message.event) : message.event;
+  const event = parseJSON(message.event);
   return 'recall_operator' in event
 })
 
@@ -327,7 +327,7 @@ const isEssence = computed(() => {
 
 const isSecretEmoji = computed(() => {
   const message = props.message
-  const event = typeof message.event === 'string' ? JSON.parse(message.event) : message.event;
+  const event = parseJSON(message.event);
   if (event?.message?.length === 1) {
     const item = event.message[0];
     if (item.type === 'face') {

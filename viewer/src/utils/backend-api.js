@@ -6,7 +6,7 @@ import { showToast } from "./toast.js";
 import { createSHA256 } from 'hash-wasm';
 import { nanoid } from 'nanoid';
 import { CalledEmitter } from "../composables/event-bus.js";
-import { convertCategoricalFriendsSL } from "./snow-luma-translator.js";
+import { convertWrappedMsgSL } from "./snow-luma-translator.js";
 
 let apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
 let wsUri = import.meta.env.VITE_WS_URI;
@@ -157,7 +157,7 @@ const fetchUserInfo = async (user_id) => {
 }
 
 const fetchMessages = async (params) => {
-  return await fetchBackendData(
+  const result = await fetchBackendData(
     'messages',
     Object.assign(
       {},
@@ -168,6 +168,13 @@ const fetchMessages = async (params) => {
       params,
     )
   )
+  const messages = result.messages
+  if (Array.isArray(messages)) {
+    for (const index in messages) {
+      messages[index] = convertWrappedMsgSL(messages[index])
+    }
+  }
+  return result
 }
 
 const fetchMsg = async (msg_id) => {
@@ -451,7 +458,7 @@ const fetchSendFileStream = async (task) => {
 };
 
 const fetchCategoricalFriends = async () => {
-  return convertCategoricalFriendsSL(await fetchActionData('get_friends_with_category'))
+  return await fetchActionData('get_friends_with_category')
 }
 
 const fetchGroupList = async () => {

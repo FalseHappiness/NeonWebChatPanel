@@ -1,7 +1,7 @@
-import { fetchCategoricalFriends } from "./backend-api.js";
+import { parseJSON, stringifyJSON } from "./others.js";
 
 const convertNoticeSL = event => {
-  event = event instanceof String ? JSON.parse(event) : event;
+  event = parseJSON(event);
   if (event.post_type === 'notice') {
     const notice = { ...event }
     if (notice.notice_type === 'notify') {
@@ -25,19 +25,27 @@ const convertNoticeSL = event => {
   return event
 }
 
-const convertCategoricalFriendsSL = list => {
-  if (!Array.isArray(list?.[0]?.buddyList)) {
-    return [{
-      categoryId: 1,
-      categoryName: "私聊",
-      categoryMbCount: list?.length,
-      buddyList: Array.isArray(list) ? list : []
-    }]
+const convertMessageSL = event => {
+  event = parseJSON(event);
+  if (["message", "message_sent"].includes(event.post_type)) {
+    const message = { ...event }
+    if (!message.hasOwnProperty("real_seq")) {
+      if (message.hasOwnProperty("message_seq")) {
+        message.real_seq = message.message_seq
+      }
+    }
+    return message
   }
-  return list
+  return event
+}
+
+const convertWrappedMsgSL = message => {
+  return {
+    ...message,
+    event: stringifyJSON(convertMessageSL(convertNoticeSL(message.event)))
+  }
 }
 
 export {
-  convertNoticeSL,
-  convertCategoricalFriendsSL
+  convertWrappedMsgSL
 }

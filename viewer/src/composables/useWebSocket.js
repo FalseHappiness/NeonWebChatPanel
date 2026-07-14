@@ -1,7 +1,7 @@
-import { ref, onUnmounted, watch } from 'vue'
-import axios from 'axios'
+import { ref, onUnmounted } from 'vue'
 import { nanoid } from "nanoid";
-import { apiBaseUrl, fetchSyncMessages } from "../utils/backend-api.js";
+import { fetchSyncMessages } from "../utils/backend-api.js";
+import { convertWrappedMsgSL } from "../utils/snow-luma-translator.js";
 
 export function useWebSocket(url, { onMessage, onNewContact, onNotice }) {
   const socket = ref(null)
@@ -46,6 +46,7 @@ export function useWebSocket(url, { onMessage, onNewContact, onNotice }) {
       if (message.id > lastMessageId.value) {
         lastMessageId.value = message.id
       }
+      message = convertWrappedMsgSL(message)
       if (echo_msg) {
         console.log(message.post_type === 'notice' ? "收到新通知:" : "收到新消息:", message);
       }
