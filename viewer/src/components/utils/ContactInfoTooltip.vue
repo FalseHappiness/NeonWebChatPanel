@@ -31,7 +31,8 @@ export default defineComponent({
     getGroupLogo,
     getUserLogo,
     disappear() {
-      this.group_user = this.user = this.group = this.group_id = this.user_id = this.position = this.showId = this.showTime = null
+      this.group_user = this.user = this.group = this.group_id = this.user_id =
+        this.position = this.showId = this.showTime = this.latestGroupNotice = null
     },
     showContactInfo(options) {
       this.disappear()
@@ -69,7 +70,11 @@ export default defineComponent({
       if (group_id && !user_id) {
         this.group = group
         fetchGroupInfo(group_id).then(setter("group"))
-        fetchGroupNotice(group_id).then(info => this.latestGroupNotice = info?.[0])
+        fetchGroupNotice(group_id).then(info => {
+          if (this.showId === showId) {
+            this.latestGroupNotice = info?.[0]?.message
+          }
+        })
       }
       this.group_id = group_id
       this.user_id = user_id
@@ -146,10 +151,12 @@ export default defineComponent({
               <div class="label">备注</div>
               <div class="value clickable overflow-ellipsis">{{ group.group_remark }}</div>
             </div>
-            <div class="row" v-if="user?.remark">
+            <div class="row" v-if="latestGroupNotice">
               <div class="label">群公告</div>
-              <span v-if="latestGroupNotice?.image?.length">【图片】</span>
-              <span v-html="latestGroupNotice.text"></span>
+              <div class="value clickable overflow-ellipsis">
+                <span v-if="latestGroupNotice?.image?.length">【图片】</span>
+                <span v-html="latestGroupNotice.text"></span>
+              </div>
             </div>
           </div>
         </div>

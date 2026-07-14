@@ -87,7 +87,7 @@ class OneBotConnectionManager:
     def get_first_self_id(self):
         return next(iter(self.active_connections.keys()))
 
-    async def call_action(self, action, params, self_id=None, timeout: float = 30.0):
+    async def call_action(self, action, params, self_id=None, timeout: float = 60.0):
         if not self.active_connections:
             raise Exception("No active OneBot connections")
 
@@ -117,7 +117,7 @@ class OneBotConnectionManager:
             print(f"OneBot action cancelled (echo: {echo})")
 
     # noinspection PyAsyncCall
-    async def send_action(self, self_id: str, action: str, params: Dict[str, Any], timeout: float = 30.0) -> Any:
+    async def send_action(self, self_id: str, action: str, params: Dict[str, Any], timeout: float = 60.0) -> Any:
         """发送API动作并等待响应"""
         if self_id not in self.active_connections:
             raise ConnectionError(f"No active connection for self_id: {self_id}")
