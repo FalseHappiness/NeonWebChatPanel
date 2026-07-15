@@ -41,7 +41,8 @@ const emit = defineEmits([
   'change-essence-msg',
   'quote-message',
   'click-show-contacts-info',
-  'change-show-group-notice'
+  'change-show-group-notice',
+  'change-show-essence-list'
 ])
 
 const noticeContainer = ref(null)
@@ -360,7 +361,7 @@ const handleNoticeExecuteCommand = e => {
           scrollToMidwayMsg(msg)
         }
       } else if (command === openEssence) {
-
+        emit('change-show-essence-list')
       } else if (command.startsWith(viewUserInfo)) {
         emit("click-show-contacts-info", e, command.substring(viewUserInfo.length))
       }
@@ -476,7 +477,7 @@ onUnmounted(() => {
           <img alt="" src="/QQ/icons/recall_24.svg">
           已撤回
         </div>
-        <div class="message-tip" v-if="isEssence">
+        <div class="message-tip" v-if="isEssence" @click="emit('change-show-essence-list')">
           <img alt="" src="/QQ/app/img/essence.bbb878de5480c01292f5.svg">
           精华
         </div>

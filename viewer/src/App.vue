@@ -171,10 +171,13 @@ const fetchEssenceMessagesWrapper = async (group_id, only_real_seq) => {
   return []
 }
 
+const groupEssenceMsgList = ref(null)
+
 const getEssenceMsgRealSeqList = async () => {
   if (activeContact.value.type === 'group') {
-    const list = await fetchEssenceMessagesWrapper(activeContact.value.contact_id, true)
-    activeContact.value.essence_real_seq_list = list
+    const list = await fetchEssenceMessagesWrapper(activeContact.value.contact_id, false)
+    activeContact.value.essence_real_seq_list = list.map(i => i.msg_seq)
+    groupEssenceMsgList.value = list
     return list
   }
   return []
@@ -291,6 +294,7 @@ const selectContact = (contact) => {
   if (activeContact.value?.contact_id === contact?.contact_id &&
     activeContact.value?.type === contact?.type) {
     activeContact.value = null;
+    groupEssenceMsgList.value = null
     return;
   }
   activeContact.value = contact
@@ -380,6 +384,7 @@ onUnmounted(() => {
       :get-messages="getMessages"
       :select-contact="selectContact"
       :self-info="selfInfo"
+      :essence-list="groupEssenceMsgList"
       ref="chatArea"
       @get-essence-msg-real-seq-list="getEssenceMsgRealSeqList"
       @change-essence-msg="changeEssenceMsg"

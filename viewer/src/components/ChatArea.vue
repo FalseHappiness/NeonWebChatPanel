@@ -5,8 +5,7 @@ import {
   fetchDisplayName,
   fetchGroupMemberInfo,
   fetchGroupNotice,
-  fetchMsg, fetchSetGroupMemberRemark, fetchSetGroupRemark,
-  getGroupUsers, setGroupUserNameCache
+  fetchMsg, fetchSetGroupMemberRemark, getGroupUsers, setGroupUserNameCache
 } from "../utils/backend-api.js";
 import PageScroller from "./utils/PageScroller.vue";
 import SimpleBarCore from "simplebar";
@@ -15,17 +14,18 @@ import MessageInputBox from "./MessageInputBox.vue";
 import { useGlobalStore } from "../store/global.js";
 import { sortGroupUsers } from "../utils/others.js";
 import Tooltip from "./utils/Tooltip.vue";
-import ColorSvg from "./utils/ColorSvg.vue";
 import { Emitter } from "../composables/event-bus.js";
 import GroupNoticesShower from "./GroupNoticesShower.vue";
 import EnterArrow from "./utils/EnterArrow.vue";
+import GroupEssenceMsgViewer from "./GroupEssenceMsgViewer.vue";
 
 const props = defineProps({
   activeContact: Object,
   messages: Array,
   getMessages: Function,
   selectContact: Function,
-  selfInfo: Object
+  selfInfo: Object,
+  essenceList: Array
 })
 
 const emit = defineEmits([
@@ -451,6 +451,12 @@ const changeShowGroupNotice = (isShow = true) => {
   showGroupNoticesViewer.value = isShow;
 }
 
+const showGroupEssenceListViewer = ref(false);
+
+const changeShowGroupEssenceList = (isShow = true) => {
+  showGroupEssenceListViewer.value = isShow;
+}
+
 const initContactInfo = () => {
   // 组件挂载时获取名称
   getName()
@@ -459,6 +465,7 @@ const initContactInfo = () => {
     getGroupNotice()
     getGroupSelfInfo()
     Emitter.on("show-group-notices", changeShowGroupNotice)
+    emit("get-essence-msg-real-seq-list")
   }
 }
 
@@ -484,6 +491,11 @@ onUnmounted(() => {
       :group_id="activeContact?.contact_id"
       :notices="groupNotifications || []"
       :onClose="() => changeShowGroupNotice(false)"
+    />
+    <GroupEssenceMsgViewer
+      v-if="showGroupEssenceListViewer"
+      :messages="essenceList"
+      :on-close="() => changeShowGroupEssenceList(false)"
     />
 
     <div class="cannot-drag window-controls" v-if="false">
@@ -614,6 +626,7 @@ onUnmounted(() => {
           @quote-message="(msg, user) => {quoteMessage(msg, user)}"
           @click-show-contacts-info="handleClickShowContactInfo"
           @change-show-group-notice="changeShowGroupNotice"
+          @change-show-essence-list="changeShowGroupEssenceList"
         />
       </template>
       <template #empty="{ initializing }">

@@ -31,7 +31,7 @@ export default defineComponent({
       this.restartAnimation(container)
       setTimeout(() => {
         mask.style.display = container.style.display = 'none'
-      }, 3000)
+      }, 300)
     },
     restartAnimation(element) {
       const display = element.style.display
@@ -44,7 +44,7 @@ export default defineComponent({
       this.close()
       setTimeout(() => {
         confirm ? this.onConfirm(...args) : this.onCancel()
-      }, 3000)
+      }, 300)
     }
   }
 })

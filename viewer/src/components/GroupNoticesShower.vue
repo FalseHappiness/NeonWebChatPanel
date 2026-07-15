@@ -49,7 +49,8 @@ export default defineComponent({
         timestamp,
         delimiter1: "/",
         alwaysMD: false,
-        showSecond: false
+        showSecond: false,
+        relative: true
       })
     },
     getNoticeImageUrl(picId) {

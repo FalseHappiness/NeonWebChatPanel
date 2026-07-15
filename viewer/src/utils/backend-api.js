@@ -6,7 +6,7 @@ import { showToast } from "./toast.js";
 import { createSHA256 } from 'hash-wasm';
 import { nanoid } from 'nanoid';
 import { CalledEmitter } from "../composables/event-bus.js";
-import { convertWrappedMsgSL } from "./snow-luma-translator.js";
+import { convertEssenceMsgListSL, convertWrappedMsgSL } from "./snow-luma-translator.js";
 
 let apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
 let wsUri = import.meta.env.VITE_WS_URI;
@@ -236,9 +236,8 @@ const fetchSendMessage = async (contact, message, signal) => {
 ;
 
 const fetchEssenceMessages = async (group_id, only_real_seq) => {
-  const data = await fetchActionData('get_essence_msg_list', { group_id, only_real_seq })
+  const data = convertEssenceMsgListSL(await fetchActionData('get_essence_msg_list', { group_id, only_real_seq }))
   return only_real_seq ? data.map(item => item.msg_seq) : data
-
 }
 
 const fetchChangeEssenceMsg = async (message_id, set) => {
@@ -796,7 +795,7 @@ const getFileDataUrl = (file_id, type) => {
 const getStreamFileDataUrl = file_id => {
   if (typeof file_id === 'object') {
     const data = file_id
-    file_id = data.data.file_id || data.data.file
+    file_id = data?.data?.file_id || data?.data?.file
   }
   return `${apiBaseUrl}/api/get_stream_file_data?file_id=${encodeURIComponent(file_id)}`
 }

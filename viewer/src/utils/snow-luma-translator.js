@@ -1,4 +1,5 @@
 import { parseJSON, stringifyJSON } from "./others.js";
+import { getStreamFileDataUrl } from "./backend-api.js";
 
 const convertNoticeSL = event => {
   event = parseJSON(event);
@@ -48,6 +49,98 @@ const convertWrappedMsgSL = message => {
   }
 }
 
+/**
+ * 将原始 msg_content 数组转为和 parseMessage 兼容的 message 结构
+ * @param {Array} msgContent 原始消息内容数组
+ * @returns {Array} 兼容格式的 message 数组
+ */
+function translateEssenceMsgContent(msgContent) {
+  return msgContent.map(item => {
+    switch (item.msg_type) {
+      case 1:
+        // 纯文本
+        return {
+          type: 'text',
+          data: {
+            text: item.text
+          }
+        };
+      case 2:
+        // QQ表情
+        return {
+          type: 'face',
+          data: {
+            id: String(item.face_index),
+            raw: {
+              faceText: item.face_text,
+              faceIndex: Number(item.face_index)
+            }
+          }
+        };
+      case 3:
+        // 图片/GIF
+        return {
+          type: 'image',
+          data: {
+            url: item.image_url,
+            thumbnail_url: item.image_thumbnail_url
+          }
+        };
+      case 4:
+        // 文件消息
+        return {
+          type: 'file',
+          data: {
+            file: item.file_name,
+            file_size: item.file_size,
+            file_id: item.file_id,
+            bus_id: item.file_bus_id,
+            url: getStreamFileDataUrl(item.file_id),
+          }
+        };
+      default:
+        // 未知类型 fallback 文本
+        console.error("Translate SnowLuma essence msg unknown type:", item)
+        return {
+          type: 'text',
+          data: {
+            text: '无法处理的消息'
+          }
+        };
+    }
+  });
+}
+
+const convertEssenceMsgListSL = list => {
+  if (!Array.isArray(list)) return list;
+  const newList = []
+  for (const msg of list) {
+    if (typeof msg === 'object') {
+      const newMsg = { ...msg }
+      if (!msg.hasOwnProperty("operator_id")) {
+        newMsg.operator_id = msg.add_digest_uin
+      }
+      if (!msg.hasOwnProperty("operator_nick")) {
+        newMsg.operator_nick = msg.add_digest_nick
+      }
+      if (!msg.hasOwnProperty("operator_time")) {
+        newMsg.operator_time = msg.add_digest_time
+      }
+      if (!msg.hasOwnProperty("sender_id")) {
+        newMsg.sender_id = msg.sender_uin
+      }
+      if (!msg.hasOwnProperty("content") && Array.isArray(msg.msg_content)) {
+        newMsg.content = translateEssenceMsgContent(msg.msg_content)
+      }
+      newList.push(newMsg)
+    } else {
+      newList.push(msg)
+    }
+  }
+  return newList
+}
+
 export {
-  convertWrappedMsgSL
+  convertWrappedMsgSL,
+  convertEssenceMsgListSL
 }

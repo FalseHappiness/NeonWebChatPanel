@@ -22,60 +22,25 @@ const hasMouseSupport = () => {
   return support_list.filter(Boolean).length > support_list.length / 2
 }
 
-const formatRelativeTime = (timeStr, alwaysHm) => {
-  if (!timeStr) return '';
-
-  const inputDate = new Date(timeStr);
-  const now = new Date();
-
-  // 检查是否是有效日期
-  if (isNaN(inputDate.getTime())) return '';
-
-  // 获取各时间部分
-  const inputYear = inputDate.getFullYear();
-  const inputMonth = inputDate.getMonth();
-  const inputDay = inputDate.getDate();
-  const inputWeekday = inputDate.getDay();
-
-  const nowYear = now.getFullYear();
-
-  // 计算本周开始时间（周日为第一天）
-  const weekStart = new Date(now);
-  weekStart.setDate(now.getDate() - now.getDay());
-  weekStart.setHours(0, 0, 0, 0);
-
-  // 计算昨天开始时间
-  const yesterdayStart = new Date(now);
-  yesterdayStart.setDate(now.getDate() - 1);
-  yesterdayStart.setHours(0, 0, 0, 0);
-
-  // 计算今天开始时间
-  const todayStart = new Date(now);
-  todayStart.setHours(0, 0, 0, 0);
-
-  const HH_mm = inputDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-  const MM_DD = `${(inputMonth + 1).toString().padStart(2, '0')}/${inputDay.toString().padStart(2, '0')}`
-
-  alwaysHm = alwaysHm ? ` ${HH_mm}` : ''
-
-  // 判断时间范围
-  if (inputDate >= todayStart) {
-    // 今天：返回时间 HH:mm
-    return HH_mm;
-  } else if (inputDate >= yesterdayStart) {
-    // 昨天：返回"昨天 HH:mm"
-    return `昨天 ${HH_mm}`;
-  } else if (inputDate >= weekStart) {
-    // 本周：返回星期几
-    return ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'][inputWeekday] + alwaysHm;
-  } else if (inputYear === nowYear) {
-    // 今年：返回 MM/DD
-    return MM_DD + alwaysHm;
-  } else {
-    // 其他：返回 YYYY/MM/DD
-    return `${inputYear.toString()}/${MM_DD}${alwaysHm}`;
-  }
+const formatRelativeTime = (timeStr, alwaysHm = false) => {
+  return formatTimeOptions({
+    timestamp: new Date(timeStr).getTime() / 1000,
+    showHm: alwaysHm,
+    relative: true,
+    showSecond: false,
+    alwaysYear: false
+  })
 };
+
+// (function() {
+//   const baseMs = Date.now();
+//   const oneDayMs = 86400 * 1000;
+//
+//   for (let i = 1; i <= 7; i++) {
+//     const ts = baseMs - i * oneDayMs;
+//     console.log(`${ts} | ${formatRelativeTime(ts)}`);
+//   }
+// })();
 
 /*群成员排序*/
 // 角色权重
@@ -215,16 +180,48 @@ function stringifyJSON(json) {
 }
 
 /**
- * 格式化秒级时间戳
- * @param {number} timestamp - 秒级时间戳
- * @param {string} [delimiter1='-'] - 日期分隔符
- * @param {string} [delimiter2=' '] - 日期与时间分隔符
- * @param {string} [delimiter3=':'] - 时分秒分隔符
- * @param {boolean} [showHm=true] - 是否显示时分
- * @param {boolean} [showSecond=true] - 是否显示秒
- * @param {boolean} [alwaysMD=true] - 是否始终显示月日
- * @param {boolean} [alwaysYear=false] - 是否始终显示年份
- * @returns {string|undefined} 格式化后的时间字符串
+ * 格式化秒级时间戳，支持绝对时间与相对时间两种模式。
+ *
+ * @param {Object} options - 选项对象
+ * @param {number | string} options.timestamp - 秒级时间戳
+ * @param {string} [options.delimiter1='-'] - 日期内部连接符（如年、月、日之间），相对模式下用于月/日、年/月/日
+ * @param {string} [options.delimiter2=' '] - 日期与时间之间的连接符，相对模式下用于“昨天”/星期/日期与时间之间
+ * @param {string} [options.delimiter3=':'] - 时间内部连接符（时、分、秒之间）
+ * @param {boolean} [options.showHm=true] - 是否显示时分。相对模式下：
+ *   - 今天、昨天始终显示时间；
+ *   - 2~6天前、今年其他、跨年时，由该参数控制是否附加时间。
+ * @param {boolean} [options.showSecond=true] - 是否显示秒，影响时间格式（HH:mm 或 HH:mm:ss）
+ * @param {boolean} [options.alwaysMD=true] - 【仅绝对模式】是否始终显示月日，为 `false` 时今天不显示月日。**相对模式下忽略此参数**
+ * @param {boolean} [options.alwaysYear=false] - 是否始终显示年份。相对模式下：
+ *   - 今天、昨天、2~6天前：不涉及年份；
+ *   - 今年其他时间（≥7天前或未来）：若为 `true` 则显示“年/月/日”，否则仅“月/日”；
+ *   - 跨年：始终显示年份，忽略此参数。
+ * @param {boolean} [options.relative=false] - 是否启用相对时间模式。
+ *   - `false`：绝对时间模式，按配置拼接年/月/日 时:分:秒；
+ *   - `true`：相对时间模式，返回友好文本，规则如下：
+ *       今天 → 只显示时间（如 `12:30` 或 `12:30:45`）
+ *       昨天 → `昨天` + 分隔符 + 时间
+ *       2~6 天前 → 星期几（如 `星期三`），若 `showHm=true` 则附加时间
+ *       今年其他时间（≥7天前/未来）→ `月/日`（或 `年/月/日`），受 `showHm` 和 `alwaysYear` 控制
+ *       跨年 → `年/月/日`，受 `showHm` 控制
+ *     日期内部分隔符由 `delimiter1` 控制，日期与时间之间由 `delimiter2` 控制。
+ *
+ * @returns {string|undefined} 格式化后的时间字符串；若时间戳无效则返回 `undefined`
+ *
+ * @example
+ * // 绝对模式（默认）
+ * formatTimeOptions({ timestamp: 1718409600 });                         // "06-15 12:00:00"
+ * formatTimeOptions({ timestamp: 1718409600, alwaysYear: true });       // "2024-06-15 12:00:00"
+ * formatTimeOptions({ timestamp: 1718409600, showSecond: false });      // "06-15 12:00"
+ *
+ * // 相对模式
+ * // 假设今天是 2026-07-15，当前时间任意
+ * formatTimeOptions({ timestamp: 当前今天时间戳, relative: true });            // "12:00:00" (例)
+ * formatTimeOptions({ timestamp: 昨天时间戳, relative: true });               // "昨天 12:00:00"
+ * formatTimeOptions({ timestamp: 2~6天前时间戳, relative: true });            // "星期日 12:00" 或 "星期日"
+ * formatTimeOptions({ timestamp: 今年 ≥7天前时间戳, relative: true });        // "07/08 12:00"
+ * formatTimeOptions({ timestamp: 今年 ≥7天前时间戳, relative: true, alwaysYear: true, delimiter1: '-' }); // "2026-07-08 12:00"
+ * formatTimeOptions({ timestamp: 跨年时间戳, relative: true });              // "2025/12/25 12:00"
  */
 const formatTimeOptions = ({
                              timestamp,
@@ -233,29 +230,93 @@ const formatTimeOptions = ({
                              delimiter3 = ':',
                              showHm = true,
                              showSecond = true,
-                             alwaysMD = true,
+                             alwaysMD = true,        // 相对模式下忽略
                              alwaysYear = false,
+                             relative = false,
                            }) => {
+  timestamp = Number.parseInt(timestamp);
   if (!Number.isInteger(timestamp)) return;
 
   const date = new Date(timestamp * 1000);
-  const now = new Date();
+  if (isNaN(date.getTime())) return;
 
-  // 判断是否是同一天
-  const isToday = (
-    date.getFullYear() === now.getFullYear() &&
-    date.getMonth() === now.getMonth() &&
-    date.getDate() === now.getDate()
-  );
-  // 是否显示年份
-  const showYear = alwaysYear || date.getFullYear() !== now.getFullYear();
-  // 是否显示月日
-  let showMD = alwaysMD;
-  if (!alwaysMD) {
-    showMD = !isToday; // 非今天才显示月日，今天只显示时间
+  // ---------- 相对时间模式 ----------
+  if (relative) {
+    const now = new Date();
+
+    const inputYear = date.getFullYear();
+    const inputMonth = date.getMonth();
+    const inputDay = date.getDate();
+    const inputWeekday = date.getDay();
+
+    const nowYear = now.getFullYear();
+    const nowMonth = now.getMonth();
+    const nowDay = now.getDate();
+
+    // 时间部分
+    const HH = date.getHours().toString().padStart(2, '0');
+    const mm = date.getMinutes().toString().padStart(2, '0');
+    const ss = date.getSeconds().toString().padStart(2, '0');
+    const timeStr = HH + delimiter3 + mm + (showSecond ? delimiter3 + ss : '');
+
+    const weekdays = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
+
+    const utcToday = Date.UTC(nowYear, nowMonth, nowDay);
+    const utcInput = Date.UTC(inputYear, inputMonth, inputDay);
+    const diffDays = (utcToday - utcInput) / 86400000;
+
+    let datePart = '';
+
+    if (diffDays === 0) {
+      // 今天：仅时间
+      return timeStr;
+    } else if (diffDays === 1) {
+      // 昨天
+      datePart = '昨天';
+    } else if (diffDays >= 2 && diffDays <= 6) {
+      // 2~6 天前
+      datePart = weekdays[inputWeekday];
+    } else {
+      const month = (inputMonth + 1).toString().padStart(2, '0');
+      const day = inputDay.toString().padStart(2, '0');
+      const year = inputYear.toString();
+
+      if (inputYear === nowYear) {
+        // 今年其他时间
+        if (alwaysYear) {
+          datePart = year + delimiter1 + month + delimiter1 + day;
+        } else {
+          datePart = month + delimiter1 + day;
+        }
+      } else {
+        // 跨年
+        datePart = year + delimiter1 + month + delimiter1 + day;
+      }
+    }
+
+    // 昨天和星期几总是显示时间；其他情况由 showHm 控制
+    const needTime = (diffDays <= 1) ? true : showHm;
+
+    if (needTime) {
+      return datePart + delimiter2 + timeStr;
+    }
+    return datePart;
   }
 
-  // 基础字段补零
+  // ---------- 绝对时间模式 ----------
+  const now = new Date();
+
+  const isToday =
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate();
+
+  const showYear = alwaysYear || date.getFullYear() !== now.getFullYear();
+  let showMD = alwaysMD;
+  if (!alwaysMD) {
+    showMD = !isToday;
+  }
+
   const year = showYear ? `${date.getFullYear()}${delimiter1}` : '';
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
@@ -263,13 +324,11 @@ const formatTimeOptions = ({
   const minutes = String(date.getMinutes()).padStart(2, '0');
   const seconds = String(date.getSeconds()).padStart(2, '0');
 
-  // 日期部分拼接
   let dateStr = '';
   if (showMD) {
     dateStr = `${year}${month}${delimiter1}${day}${delimiter2}`;
   }
 
-  // 时间部分拼接
   let timeStr = '';
   if (showHm) {
     timeStr = `${hours}${delimiter3}${minutes}`;
