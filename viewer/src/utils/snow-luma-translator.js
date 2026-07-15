@@ -140,7 +140,16 @@ const convertEssenceMsgListSL = list => {
   return newList
 }
 
+const convertGroupAlbumListSL = data => {
+  const newData = []
+  for (const item of data) {
+    
+  }
+  return newData
+}
+
 export {
   convertWrappedMsgSL,
-  convertEssenceMsgListSL
+  convertEssenceMsgListSL,
+  convertGroupAlbumListSL
 }

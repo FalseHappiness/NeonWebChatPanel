@@ -6,7 +6,7 @@ import { showToast } from "./toast.js";
 import { createSHA256 } from 'hash-wasm';
 import { nanoid } from 'nanoid';
 import { CalledEmitter } from "../composables/event-bus.js";
-import { convertEssenceMsgListSL, convertWrappedMsgSL } from "./snow-luma-translator.js";
+import { convertEssenceMsgListSL, convertGroupAlbumListSL, convertWrappedMsgSL } from "./snow-luma-translator.js";
 
 let apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
 let wsUri = import.meta.env.VITE_WS_URI;
@@ -496,6 +496,40 @@ const fetchRemainGroupAtAll = async (group_id) => {
   return await fetchActionData('get_group_at_all_remain', { group_id })
 }
 
+const fetchAPIVersionInfo = async () => {
+  return await fetchActionData("get_version_info")
+}
+
+/**
+ * 将 QQ 的 [em]e数字[/em] 格式还原为真实 Unicode 表情
+ * @param {string} text - 包含 [em] 标签的原始字符串
+ * @returns {string} 还原后的字符串
+ */
+function decodeQQEmoji(text) {
+  if (typeof text !== 'string') return text;
+
+  return text.replace(/\[em]e(\d+)\[\/em]/g, (match, num) => {
+    const codePoint = parseInt(num, 10) - 200000; // 核心算法
+    // 用 String.fromCodePoint 将 Unicode 码点转成字符
+    return String.fromCodePoint(codePoint);
+  });
+}
+
+
+const fetchGroupAlbumList = async (group_id, attach_info) => {
+  const snowLumaEndpoint = "get_group_album_list"
+  const params = { group_id, attach_info }
+  if (useGlobalStore().isSnowLuma()) {
+    return await convertGroupAlbumListSL(await fetchActionData(snowLumaEndpoint, params))
+  } else {
+    const ncData = await fetchActionData("get_qun_album_list", params)
+    if (ncData.album_list?.length && Object.keys(ncData.album_list[0]).length === 1) { // SnowLuma get_qun_album_list 只有 album_id
+      return await convertGroupAlbumListSL(await fetchActionData(snowLumaEndpoint, params))
+    }
+    return ncData;
+  }
+}
+
 const isObject = (variable) => {
   return typeof variable === 'object' && !Array.isArray(variable);
 };
@@ -850,5 +884,6 @@ export {
   fetchSetLongNick,
   fetchSyncMessages,
   fetchRemainGroupAtAll,
-  getGroupNoticePicUrl
+  getGroupNoticePicUrl,
+  fetchAPIVersionInfo,
 }

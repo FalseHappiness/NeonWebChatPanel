@@ -1,7 +1,8 @@
 import { ref, onUnmounted } from 'vue'
 import { nanoid } from "nanoid";
-import { fetchSyncMessages } from "../utils/backend-api.js";
+import { fetchAPIVersionInfo, fetchSyncMessages } from "../utils/backend-api.js";
 import { convertWrappedMsgSL } from "../utils/snow-luma-translator.js";
+import { useGlobalStore } from "../store/global.js";
 
 export function useWebSocket(url, { onMessage, onNewContact, onNotice }) {
   const socket = ref(null)
@@ -286,6 +287,9 @@ export function useWebSocket(url, { onMessage, onNewContact, onNotice }) {
       if (shouldSync.value) {
         syncMessages()
       }
+      fetchAPIVersionInfo()
+        .then(info => useGlobalStore().apiVersionInfo = info)
+        .catch(e => console.log("Unable to get api version info:", e))
     }
 
     socket.value.onmessage = (event) => {

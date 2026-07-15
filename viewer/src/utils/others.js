@@ -22,9 +22,14 @@ const hasMouseSupport = () => {
   return support_list.filter(Boolean).length > support_list.length / 2
 }
 
+// 日期转时间戳函数
+function dateToTimestamp(dateStr) {
+  return Math.floor(new Date(dateStr).getTime() / 1000);
+}
+
 const formatRelativeTime = (timeStr, alwaysHm = false) => {
   return formatTimeOptions({
-    timestamp: new Date(timeStr).getTime() / 1000,
+    timestamp: dateToTimestamp(timeStr),
     showHm: alwaysHm,
     relative: true,
     showSecond: false,
