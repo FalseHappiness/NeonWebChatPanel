@@ -2,11 +2,13 @@
 import { defineComponent } from 'vue'
 
 export default defineComponent({
-  name: "BasicBox",})
+  name: "BasicBox",
+  props: { jumpUrl: { String, default: "" } }
+})
 </script>
 
 <template>
-  <a class="message-box-less message-json-basic-box">
+  <a class="message-box-less message-json-basic-box" target="_blank" :href="jumpUrl">
     <slot></slot>
   </a>
 </template>

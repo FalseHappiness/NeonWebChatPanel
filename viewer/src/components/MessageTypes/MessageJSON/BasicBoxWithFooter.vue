@@ -1,19 +1,20 @@
-<script lang="ts">
-import {defineComponent} from 'vue'
+<script>
+import { defineComponent } from 'vue'
 import BasicBox from "./BasicBox.vue";
 
 export default defineComponent({
   name: "BasicBoxWithFooter",
-  components: {BasicBox},
+  components: { BasicBox },
   props: {
     footerIcon: String,
-    footerText: String
+    footerText: String,
+    jumpUrl: { String, default: "" }
   }
 })
 </script>
 
 <template>
-  <BasicBox>
+  <BasicBox :jump-url="jumpUrl">
     <slot></slot>
     <hr>
     <div class="footer">
@@ -25,11 +26,16 @@ export default defineComponent({
 
 <style scoped>
 hr {
-  height: 1px;
+  height: 0;
   border: 0;
-  margin: 10px 0 5px 0;
+  margin: 4px 0 2px 0;
   width: 100%;
-  background-color: #e1e1e3;
+  border-bottom: 1px solid #e1e1e3;
+}
+
+.footer {
+  display: flex;
+  align-items: center;
 }
 
 .footer img {

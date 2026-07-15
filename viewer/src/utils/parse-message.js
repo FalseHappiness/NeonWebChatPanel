@@ -24,6 +24,8 @@ import FeedLua from "../components/MessageTypes/MessageJSON/FeedLua.vue";
 import ContactLua from "../components/MessageTypes/MessageJSON/ContactLua.vue";
 import LottieDot from "../components/utils/LottieDot.vue";
 import { formatTimeOptions, parseJSON } from "./others.js";
+import UnparsedJSON from "../components/MessageTypes/MessageJSON/UnparsedJSON.vue";
+import ActivityMD from "../components/MessageTypes/MessageJSON/ActivityMD.vue";
 
 const formatTime = (message) => {
   if (!message?.time) return
@@ -459,11 +461,12 @@ const parseMessage = (message) => {
             "com.tencent.multimsg": MultiMsg,
             "com.tencent.feed.lua": FeedLua,
             "com.tencent.contact.lua": ContactLua,
+            "com.tencent.activity.md": ActivityMD
           }
           const view_components_map = {
             "news": ViewNews
           }
-          let component = view_components_map[data?.view] || components_map[data.app];
+          const component = view_components_map[data?.view] || components_map[data.app] || UnparsedJSON;
           if (component) {
             children.push(
               h(component, {

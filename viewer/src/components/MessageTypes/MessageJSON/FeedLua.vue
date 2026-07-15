@@ -1,15 +1,13 @@
 <script>
 import { defineComponent } from 'vue'
 import BasicBoxWithFooter from "./BasicBoxWithFooter.vue";
-import { getMultimediaProxyUrl } from "../../../utils/backend-api.js";
 
 export default defineComponent({
   name: "FeedLua",
-  methods: { getMultimediaProxyUrl },
   components: { BasicBoxWithFooter },
   props: { json: Object },
   computed: {
-    detail() {
+    feed() {
       return this.json?.meta?.feed;
     }
   }
@@ -17,10 +15,14 @@ export default defineComponent({
 </script>
 
 <template>
-  <BasicBoxWithFooter class="message-feed-lua" :footer-icon="detail.tagIcon" :footer-text="detail.tagName">
-    <img alt="" :src="detail.cover" class="cover-img">
-    <p class="forward-message-text text-muted">{{ detail.forwardMessage }}</p>
-    <p class="title-text">{{ detail.title }}</p>
+  <BasicBoxWithFooter
+    class="message-feed-lua"
+    :footer-icon="feed.tagIcon"
+    :footer-text="feed.tagName"
+    :jump-url="feed.jumpUrl">
+    <img alt="" :src="feed.cover" class="cover-img">
+    <p class="forward-message-text text-muted">{{ feed.forwardMessage }}</p>
+    <p class="title-text">{{ feed.title }}</p>
   </BasicBoxWithFooter>
 </template>
 
