@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import ContactItem from './ContactItem.vue'
-import VueResizable from 'vue-resizable';
+import VueResizable from 'vue-resizable/src/components/vue-resizable.vue';
 import VirtualScroller from "./utils/VirtualScroller.vue";
 import { fetchSetLongNick, getUserLogo } from "../utils/backend-api.js";
 import { Emitter } from "../composables/event-bus.js";

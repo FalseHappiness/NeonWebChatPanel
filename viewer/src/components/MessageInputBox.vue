@@ -1,6 +1,6 @@
 <script>
 import { defineComponent, toRaw, inject } from 'vue'
-import VueResizable from 'vue-resizable';
+import VueResizable from 'vue-resizable/src/components/vue-resizable.vue';
 import ColorSvg from "./utils/ColorSvg.vue";
 import SimpleBar from "simplebar-vue";
 import 'simplebar-vue/dist/simplebar.min.css';
