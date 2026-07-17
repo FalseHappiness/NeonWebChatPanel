@@ -669,32 +669,51 @@ def get_host_path(container_path):
 @app.api_route("/api/get_file_data", methods=["GET", "POST"])
 async def get_file(params: dict = Depends(get_request_params)):
     type_val = params.get("type", 'file')
+    # 读取 out_format 参数，默认 mp3
+    out_format = params.get("out_format", "mp3")
 
     allowed_types = ['image', 'record', 'file']
+    allowed_audio_formats = ["mp3", "wav"]
+
+    # 校验 type 参数
     if type_val not in allowed_types:
         return JSONResponse(
             status_code=400,
             content="The value of the 'type' parameter is not allowed, only supported " + str(allowed_types)
         )
 
+    # 仅 record 类型时校验音频格式
+    if type_val == "record" and out_format not in allowed_audio_formats:
+        return JSONResponse(
+            status_code=400,
+            content=f"The out_format only supports {allowed_audio_formats}"
+        )
+
     req_data = {}
     if type_val == 'record':
-        req_data['out_format'] = 'mp3'
+        req_data['out_format'] = out_format
 
     def process_file(data, _):
         file_path = data.get('file')
         if type_val == 'record':
-            base64_mp3 = data.get('base64', '')
-            if base64_mp3 == '':
+            base64_data = data.get('base64', '')
+            if base64_data == '':
                 return process_error("file not found")
-            mp3_data = base64.b64decode(base64_mp3)
+            audio_data = base64.b64decode(base64_data)
 
-            # 返回MP3数据
+            # 根据格式设置MIME和文件名
+            if out_format == "wav":
+                media_type = "audio/wav"
+                filename = "audio.wav"
+            else:  # mp3
+                media_type = "audio/mpeg"
+                filename = "audio.mp3"
+
             return Response(
-                content=mp3_data,
-                media_type='audio/mpeg',
+                content=audio_data,
+                media_type=media_type,
                 headers={
-                    'Content-Disposition': 'inline; filename=audio.mp3'
+                    'Content-Disposition': f'inline; filename={filename}'
                 }
             )
         else:

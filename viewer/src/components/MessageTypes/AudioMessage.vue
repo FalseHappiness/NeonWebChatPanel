@@ -15,7 +15,7 @@
         </svg>
       </div>
 
-      <div ref="waveform" class="waveform-container"></div>
+      <div ref="waveform" class="waveform-container" :style="{ '--cursor-color': cursorColor }"></div>
 
       <div class="audio-duration" :style="{ color: color }">
         {{ formattedDuration }}
@@ -45,6 +45,10 @@ export default {
     color: {
       type: String,
       default: 'black'
+    },
+    cursorColor: {
+      type: String,
+      default: 'rgba(255, 255, 255, 0.8)'
     }
   },
   data() {
@@ -85,7 +89,7 @@ export default {
         barWidth: 2,
         barGap: 2,
         barHeight: 2,
-        barRadius: 0,
+        barRadius: 2,
         height: 20,
         responsive: true,
         interact: true,
@@ -131,13 +135,9 @@ export default {
 
 <style scoped>
 .audio-message {
-  /*border: 1px solid #ddd;*/
-  /*border-radius: 8px;*/
   padding: 0 6px;
-  /*background-color: #f8f8f8;*/
-  /*background-color: #0099ff;*/
-  /*box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);*/
   height: 38px;
+  white-space: normal;
 }
 
 .audio-controls {
@@ -179,12 +179,18 @@ export default {
 }
 
 .waveform-container ::part(cursor) {
-  opacity: 0.9;
-  filter: blur(0.1px);
+  /*noinspection CssUnresolvedCustomProperty*/
+  background: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0) 0%,
+    var(--cursor-color) 40%,
+    var(--cursor-color) 60%,
+    rgba(0, 0, 0, 0) 100%
+  );
 }
 
 .waveform-container ::part(wrapper) {
-  height: 25px;
+  height: 35px;
   cursor: e-resize;
 }
 

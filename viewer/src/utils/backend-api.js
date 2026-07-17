@@ -523,7 +523,7 @@ function decodeQQEmoji(text) {
 const fetchGroupAlbumList = async (group_id, attach_info) => {
   const snowLumaEndpoint = "get_group_album_list"
   const params = { group_id, attach_info }
-  if (useGlobalStore().isSnowLuma()) {
+  if (isSnowLuma()) {
     return convertGroupAlbumListSL(await fetchActionData(snowLumaEndpoint, params));
   } else {
     const ncData = await fetchActionData("get_qun_album_list", params)
@@ -827,7 +827,11 @@ const getFileDataUrl = (file_id, type) => {
   }
 
   type = type || 'file'
-  return `${apiBaseUrl}/api/get_file_data?type=${encodeURIComponent(type)}&file_id=${encodeURIComponent(file_id)}`
+  let url = `${apiBaseUrl}/api/get_file_data?type=${encodeURIComponent(type)}&file_id=${encodeURIComponent(file_id)}`
+  if (type === 'record') {
+    url += '&out_format=' + (isSnowLuma() ? 'wav' : 'mp3')
+  }
+  return url
 }
 
 const getStreamFileDataUrl = file_id => {
@@ -848,6 +852,10 @@ const getUserLogo = (user_id, size = 100) => {
 
 const getGroupNoticePicUrl = (pic_url) => {
   return `https://gdynamic.qpic.cn/gdynamic/${pic_url}/0`
+}
+
+const isSnowLuma = ()=>{
+  return useGlobalStore().apiVersionInfo?.app_name?.includes("SnowLuma")
 }
 
 export {

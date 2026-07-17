@@ -146,10 +146,6 @@ export const useGlobalStore = defineStore(
 
     const nameCaches = reactive({});
 
-    const apiVersionInfo = {
-      app_name: "NapCat.Onebot"
-    }
-
     return {
       normalEmojiids,
       superEmojiids,
@@ -159,10 +155,9 @@ export const useGlobalStore = defineStore(
       emojiDescribes,
       allEmojiids,
       nameCaches,
-      apiVersionInfo,
-      isSnowLuma: () => {
-        return apiVersionInfo.app_name.includes("SnowLuma")
-      }
+      apiVersionInfo: {
+        app_name: "NapCat.Onebot"
+      },
     };
   },
   // {
