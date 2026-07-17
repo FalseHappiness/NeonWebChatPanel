@@ -60,6 +60,12 @@ export default defineComponent({
       return task.controller?.signal?.aborted || task?.cancelled
     },
     /**
+     * 判断任务是否出错
+     */
+    isTaskError(task) {
+      return task?.error
+    },
+    /**
      * 计算任务的上传速度 (bytes/ms)
      */
     getTaskSpeed(task) {
@@ -138,6 +144,10 @@ export default defineComponent({
             <div class="files-upload-tasks-item-info">
               <TruncatedText one-line :content="task.file.name"/>
               <div class="files-upload-tasks-item-status">
+                <!-- 出错 -->
+                <template v-if="isTaskError(task)">
+                  <span class="status-error">出错: {{ task.error }}</span>
+                </template>
                 <!-- 已取消 -->
                 <template v-if="isTaskCancelled(task)">
                   <span class="status-cancelled">已取消</span>
@@ -272,6 +282,10 @@ export default defineComponent({
 
 .status-remaining {
   color: #999;
+}
+
+.status-error {
+  color: #FF4D4F;
 }
 
 .files-upload-tasks-item-progress-bar-container {

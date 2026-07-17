@@ -85,6 +85,7 @@ export default defineComponent({
       recordShouldCancel: false,
       recordStream: null,
       isHoveringCancel: false,
+      isDropRecordFiles: false
     }
   },
   mounted() {
@@ -320,11 +321,14 @@ export default defineComponent({
     },
 
     async handleDocumentDrop(e) {
+      this.isDropRecordFiles = false
+      const isChatContainer = e.target?.closest('.chat-container')
+      const isRecordPanel = e.target?.closest(".message-input-record-panel")
       // 检查是否是在编辑器内发生的拖放
       if (this.$refs.editor?.contains(e.target)) {
         e.preventDefault();
         await this.handleDrop(e);
-      } else if (e.target?.closest('.chat-container')) {
+      } else if (isChatContainer || isRecordPanel) {
         e.preventDefault();
         let files = await this.processDataTransferItems(e.dataTransfer.items)
         files = files
@@ -335,12 +339,24 @@ export default defineComponent({
           if (filteredFiles.length !== files.length) {
             showToast('info', '已自动过滤空文件/文件夹')
           }
-          this.draggedFiles = filteredFiles
+          // ✅ isRecordPanel 额外过滤：只保留音频文件
+          if (isRecordPanel) {
+            const audioFiles = filteredFiles.filter(file => file.type.startsWith('audio/'))
+            if (audioFiles.length !== filteredFiles.length) {
+              showToast('info', '已自动过滤非音频文件')
+            }
+            this.isDropRecordFiles = true
+            this.draggedFiles = audioFiles
+          } else {
+            // 聊天面板保持原样
+            this.draggedFiles = filteredFiles
+          }
         }
       }
     },
 
     handleFilesConfirm() {
+      const type = this.isDropRecordFiles ? "record" : 'file'
       const files = toRaw(this.draggedFiles)
       this.draggedFiles = []
       const maxSize = 20 * 1024 * 1024; // 20MB
@@ -351,7 +367,15 @@ export default defineComponent({
         return result => {
           if (result?.status === 'ok') {
             task.completed = true
+          } else {
+            handleError(task)(new Error(JSON.stringify(result)))
           }
+        }
+      }
+      const handleError = task => {
+        return error => {
+          task.error = error?.message || error
+          console.log("Send file error:", error)
         }
       }
       for (const file of minFiles) {
@@ -363,13 +387,16 @@ export default defineComponent({
           file,
           task_id,
           completed: false,
-          cancelled: false
+          cancelled: false,
+          type
         })
         const task = this.filesUploadTasks.find(t => t.task_id === task_id)
         controller.signal.onabort = () => {
           task.cancelled = true
         }
-        fetchSendFiles({ contact, files: file, controller }).then(handleResult(task))
+        fetchSendFiles({ contact, files: file, controller, type })
+          .then(handleResult(task))
+          .catch(handleError(task))
       }
       for (const file of bigFiles) {
         const task_id = nanoid()
@@ -386,14 +413,17 @@ export default defineComponent({
           chunk_index: undefined,
           completed: false,
           cancelled: false,
-          is_calc_hash: true
+          is_calc_hash: true,
+          type
         })
         // 获取 Proxy 对象
         const task = this.filesUploadTasks.find(t => t.task_id === task_id)
         controller.signal.onabort = () => {
           task.cancelled = true
         }
-        fetchSendFileStream(task).then(handleResult(task))
+        fetchSendFileStream(task)
+          .then(handleResult(task))
+          .catch(handleError(task))
       }
     },
 
@@ -2131,6 +2161,7 @@ export default defineComponent({
       :contact-name="activeContact?.name"
       :on-confirm="handleFilesConfirm"
       :on-cancel="handleFilesConfirmCancel"
+      :type-name="isDropRecordFiles ? '语音消息' : undefined"
     />
     <ContactsPicker v-if="messageIdToForward?.length"
                     :on-confirm="handleContactsPickerConfirm"

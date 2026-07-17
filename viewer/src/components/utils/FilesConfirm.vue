@@ -25,6 +25,10 @@ export default defineComponent({
     onCancel: {
       type: Function,
       default: new Function()
+    },
+    typeName: {
+      type: String,
+      default: undefined
     }
   },
   methods: {
@@ -42,7 +46,7 @@ export default defineComponent({
     <SimplePopUp ref="popUp" :on-confirm="onConfirm" :on-cancel="onCancel">
       <template #default>
         <div class="files-confirm-title">
-          发送给 {{ contactName }}
+          发送<span v-if="typeName">{{ ` ${typeName} ` }}</span>给 {{ contactName }}
           <img alt="" src="/QQ/icons/close_fill_24.svg" class="files-confirm-close-btn cannot-drag"
                @click="confirm(false)">
         </div>
