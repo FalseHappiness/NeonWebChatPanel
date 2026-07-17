@@ -644,12 +644,17 @@ export default defineComponent({
       this.insertNodeAtCursor(fragment);
     },
 
-    getPngEmojiUrl(emoji_id, frame = null) {
+    getPngEmojiUrl(emoji_id, forceStatic = false) {
       let add = ''
-      if (![undefined, null].includes(frame)) {
-        add = `_${frame}`
+      if (forceStatic && this.isDynamicDefaultPngEmoji(emoji_id)) {
+        add = `_0`
       }
       return `/QQ/EmojiSystermResource/${emoji_id}/png/${emoji_id}${add}.png`
+    },
+
+    isDynamicDefaultPngEmoji(emoji_id) {
+      // 466, 468, 469 即使加了 _0 也是动态的
+      return [367, 466, 468, 469].includes(Number(emoji_id))
     },
 
     getApngEmojiUrl(emoji_id) {
@@ -2255,7 +2260,7 @@ export default defineComponent({
                               :data-emoji="emoji"
                             >
                               <img
-                                :src="getPngEmojiUrl(emoji, String(emoji) === '367' ? 0 : null)"
+                                :src="getPngEmojiUrl(emoji, true)"
                                 alt=""
                                 :data-emoji-animation="getApngEmojiUrl(emoji) ? 'static' : ''"
                               />

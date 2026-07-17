@@ -122,8 +122,8 @@ function main() {
     console.log(`输出文件: ${outputFile}`);
 
     // 复制JSON文件到src/assets目录
-    const copiedFiles = copyJsonFiles(emojiDir, targetDir);
-    console.log(`已复制 ${copiedFiles} 个JSON文件到 ${targetDir}`);
+    // const copiedFiles = copyJsonFiles(emojiDir, targetDir);
+    // console.log(`已复制 ${copiedFiles} 个JSON文件到 ${targetDir}`);
 
     // 表情描述
     // 先复制用户目录的配置

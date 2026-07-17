@@ -827,11 +827,7 @@ const getFileDataUrl = (file_id, type) => {
   }
 
   type = type || 'file'
-  let url = `${apiBaseUrl}/api/get_file_data?type=${encodeURIComponent(type)}&file_id=${encodeURIComponent(file_id)}`
-  if (type === 'record') {
-    url += '&out_format=' + (isSnowLuma() ? 'wav' : 'mp3')
-  }
-  return url
+  return `${apiBaseUrl}/api/get_file_data?type=${encodeURIComponent(type)}&file_id=${encodeURIComponent(file_id)}`
 }
 
 const getStreamFileDataUrl = file_id => {
@@ -854,7 +850,7 @@ const getGroupNoticePicUrl = (pic_url) => {
   return `https://gdynamic.qpic.cn/gdynamic/${pic_url}/0`
 }
 
-const isSnowLuma = ()=>{
+const isSnowLuma = () => {
   return useGlobalStore().apiVersionInfo?.app_name?.includes("SnowLuma")
 }
 

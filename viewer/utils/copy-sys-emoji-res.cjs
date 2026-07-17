@@ -18,8 +18,17 @@ async function deleteAndRecreateDir(dirPath) {
 
 async function copyEntireDir(srcDir, destDir) {
   try {
-    // 使用 fs.cp 递归复制整个目录（Node.js 16.7.0+）
-    await fs.promises.cp(srcDir, destDir, { recursive: true, force: true });
+    // 使用 filter 排除 .DS_Store 文件
+    await fs.promises.cp(srcDir, destDir, {
+      recursive: true,
+      force: true,
+      filter: (src) => {
+        const filename = path.basename(src);
+        // 排除 .DS_Store normal_emojiids.json super_emojiids.json 文件
+        const excludeFiles = ['.DS_Store', 'normal_emojiids.json', 'super_emojiids.json'];
+        return !excludeFiles.includes(filename);
+      }
+    });
     console.log(`已复制目录: ${srcDir} -> ${destDir}`);
   } catch (err) {
     console.error(`复制目录时出错: ${srcDir}`, err);
@@ -64,7 +73,7 @@ async function findAndCopyEmojiResources() {
         await access(emojiSourceDir);
         console.log(`找到资源目录: ${emojiSourceDir}`);
 
-        // 3. 直接复制整个目录
+        // 3. 直接复制整个目录（已过滤 .DS_Store）
         await copyEntireDir(emojiSourceDir, emojiDir);
         console.log(`✅ 已替换全部Emoji资源, uin: ${uinDir.name}`);
         return; // 找到第一个（最新的）有效目录后退出
