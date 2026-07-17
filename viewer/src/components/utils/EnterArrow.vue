@@ -10,12 +10,11 @@ export default defineComponent({
       type: Number, default: 20
     }
   },
-  emits: ["click"]
 })
 </script>
 
 <template>
-  <div @click="this.$emit('click')" class="enter-arrow" :style="{ width: size + 'px', height: size + 'px' }">
+  <div class="enter-arrow" :style="{ width: size + 'px', height: size + 'px' }">
     <ColorSvg src="/QQ/icons/arrow_right_small_16.svg" style="background-color: #7F7F7F;"></ColorSvg>
   </div>
 </template>

@@ -43,10 +43,12 @@ const showToast = (type, text, time) => {
 }
 
 const showErrorToast = (text, time) => showToast('error', text, time)
+const showWarningToast = (text, time) => showToast('warning', text, time)
 
 window.showToast = showToast
 
 export {
   showToast,
-  showErrorToast
+  showErrorToast,
+  showWarningToast
 }

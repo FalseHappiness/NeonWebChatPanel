@@ -257,7 +257,10 @@ function fileToBase64(file) {
   });
 }
 
-const fetchSendFiles = async (contact, files, signal) => {
+const fetchSendFiles = async ({ contact, files, signal, controller, type = 'file' }) => {
+  if (!(signal instanceof AbortSignal) && controller instanceof AbortController) {
+    signal = controller.signal
+  }
   const message = [];
   if (!Array.isArray(files)) {
     files = [files]
@@ -266,7 +269,7 @@ const fetchSendFiles = async (contact, files, signal) => {
     try {
       const base64 = await fileToBase64(file);
       message.push({
-        type: 'file',
+        type,
         data: {
           file: base64,
           name: file.name
@@ -333,6 +336,7 @@ export async function calcFileSha256(file, chunkSize = 2 * 1024 * 1024, onProgre
  * @param {number} task.chunk_index
  * @param {number} task.total_chunks
  * @param {boolean} task.is_calc_hash
+ * @param {string} [task.type='file'] - 发送消息类型
  * @returns {Promise<object>} 上传完成后的消息响应
  */
 const fetchSendFileStream = async (task) => {
@@ -520,11 +524,11 @@ const fetchGroupAlbumList = async (group_id, attach_info) => {
   const snowLumaEndpoint = "get_group_album_list"
   const params = { group_id, attach_info }
   if (useGlobalStore().isSnowLuma()) {
-    return await convertGroupAlbumListSL(await fetchActionData(snowLumaEndpoint, params))
+    return convertGroupAlbumListSL(await fetchActionData(snowLumaEndpoint, params));
   } else {
     const ncData = await fetchActionData("get_qun_album_list", params)
     if (ncData.album_list?.length && Object.keys(ncData.album_list[0]).length === 1) { // SnowLuma get_qun_album_list 只有 album_id
-      return await convertGroupAlbumListSL(await fetchActionData(snowLumaEndpoint, params))
+      return convertGroupAlbumListSL(await fetchActionData(snowLumaEndpoint, params));
     }
     return ncData;
   }

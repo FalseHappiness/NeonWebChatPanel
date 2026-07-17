@@ -23,10 +23,13 @@ import ContactsPicker from "./utils/ContactsPicker.vue";
 import { Emitter } from "../composables/event-bus.js";
 import { nanoid } from "nanoid";
 import CustomScrollBar from "./utils/CustomScrollBar.vue";
+import RecordMicrophoneIcon from "./utils/RecordMicrophoneIcon.vue";
+import { showErrorToast, showWarningToast } from "../utils/toast.js";
 
 export default defineComponent({
   name: "MessageInputBox",
   components: {
+    RecordMicrophoneIcon,
     CustomScrollBar,
     ContactsPicker,
     FilesConfirm,
@@ -71,7 +74,17 @@ export default defineComponent({
       messageContentToForward: undefined,
       filesUploadTasks: [],
       showFilesUploadTasks: false,
-      remainGroupAtAll: undefined
+      remainGroupAtAll: undefined,
+      isShowRecordPanel: false,
+      isRecording: false,
+      recordDuration: 0,
+      recordTimer: null,
+      mediaRecorder: null,
+      audioChunks: [],
+      recordActiveCount: 0,
+      recordShouldCancel: false,
+      recordStream: null,
+      isHoveringCancel: false,
     }
   },
   mounted() {
@@ -84,6 +97,8 @@ export default defineComponent({
     window.addEventListener('keydown', this.handleWindowKeyDown);
     document.addEventListener('drop', this.handleDocumentDrop);
     document.addEventListener('dragover', this.handleDocumentDragover);
+    window.addEventListener('keydown', this.handleWindowRecordKeyDown);
+    window.addEventListener('keyup', this.handleWindowRecordKeyUp);
 
     this.$nextTick(() => {
       this.refReady = true
@@ -106,6 +121,8 @@ export default defineComponent({
       this.$refs.editor?.removeEventListener('compositionend', this.handleCompositionEnd)
       document.removeEventListener('click', this.handleDocumentClick);
       window.removeEventListener('keydown', this.handleWindowKeyDown);
+      window.removeEventListener('keyup', this.handleWindowRecordKeyUp);
+      window.removeEventListener('keydown', this.handleWindowRecordKeyDown);
       document.removeEventListener('drop', this.handleDocumentDrop);
       document.removeEventListener('dragover', this.handleDocumentDragover);
 
@@ -352,7 +369,7 @@ export default defineComponent({
         controller.signal.onabort = () => {
           task.cancelled = true
         }
-        fetchSendFiles(contact, file, controller).then(handleResult(task))
+        fetchSendFiles({ contact, files: file, controller }).then(handleResult(task))
       }
       for (const file of bigFiles) {
         const task_id = nanoid()
@@ -1736,6 +1753,245 @@ export default defineComponent({
     },
     handleFilesUploadTasksViewerClose() {
       this.showFilesUploadTasks = false
+    },
+
+    // ====== 录音功能 ======
+
+    formatRecordTime(seconds) {
+      const days = Math.floor(seconds / 86400)
+      const hours = Math.floor((seconds % 86400) / 3600)
+      const minutes = Math.floor((seconds % 3600) / 60)
+      const secs = seconds % 60
+      let result = ''
+      if (days > 0) result += `${String(days).padStart(2, '0')} 天 `
+      if (hours > 0) result += `${String(hours).padStart(2, '0')}:`
+      result += `${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
+      return result
+    },
+
+    async requestRecordPermission() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+        return stream
+      } catch (err) {
+        console.error('获取录音权限失败:', err)
+        showErrorToast('获取录音权限失败')
+        return null
+      }
+    },
+
+    /**
+     * 打开录音面板前先获取权限，只有获取到权限才切换到面板
+     */
+    async handleOpenRecordPanel() {
+      if (this.isShowRecordPanel) return
+      const stream = await this.requestRecordPermission()
+      if (stream) {
+        this.recordStream = stream
+        this.isShowRecordPanel = true
+      }
+    },
+
+    /**
+     * 增加一个录音激活源，只有当所有激活源都释放后录音才会停止
+     */
+    incrRecord() {
+      if (!this.activeContact) return
+      // 防止重复录音
+      if (this.isRecording) return
+      this.recordActiveCount++
+      if (this.recordActiveCount === 1) {
+        // 首次激活，使用已缓存的流（从面板打开时获取），无需重新申请权限
+        const stream = this.recordStream
+        if (!stream) {
+          this.recordActiveCount = 0
+          return
+        }
+        this.isRecording = true
+        this.recordShouldCancel = false
+        this.audioChunks = []
+        this.recordDuration = 0
+
+        const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' })
+        this.mediaRecorder = mediaRecorder
+
+        mediaRecorder.ondataavailable = e => {
+          if (e.data.size > 0) {
+            this.audioChunks.push(e.data)
+          }
+        }
+
+        // 不在此处停止 tracks，保持流复用，面板关闭时统一释放
+        mediaRecorder.onstop = () => {
+        }
+
+        mediaRecorder.start()
+
+        // 启动计时器
+        this.recordTimer = setInterval(() => {
+          this.recordDuration++
+        }, 1000)
+      }
+    },
+
+    /**
+     * 减少一个录音激活源，当所有激活源都释放时停止录音并发送
+     */
+    decrRecord() {
+      if (this.recordActiveCount <= 0) return
+      this.recordActiveCount--
+      if (this.recordActiveCount === 0) {
+        this.finishRecord()
+      }
+    },
+
+    /**
+     * 所有激活源释放时，处理录音结果
+     */
+    async finishRecord() {
+      if (!this.isRecording) return
+      this.isRecording = false
+
+      // 停止计时器
+      if (this.recordTimer) {
+        clearInterval(this.recordTimer)
+        this.recordTimer = null
+      }
+
+      // 停止 MediaRecorder，等待 onstop 事件确保所有 audioChunks 已收集完毕
+      if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
+        await new Promise(resolve => {
+          this.mediaRecorder.onstop = () => {
+            resolve()
+          }
+          this.mediaRecorder.stop()
+        })
+      }
+      this.mediaRecorder = null
+
+      const duration = this.recordDuration
+      this.recordDuration = 0
+
+      // 录音时间太短（< 1秒）
+      if (duration < 1) {
+        showWarningToast('录音时间太短')
+        this.audioChunks = []
+        return
+      }
+
+      // 如果标记为取消，不发送
+      if (this.recordShouldCancel) {
+        this.audioChunks = []
+        this.recordShouldCancel = false
+        return
+      }
+
+      // 发送录音
+      if (this.audioChunks.length > 0) {
+        const audioBlob = new Blob(this.audioChunks, { type: 'audio/webm' })
+        this.audioChunks = []
+        const fileName = `record_${Date.now()}.webm`
+        const file = new File([audioBlob], fileName, { type: 'audio/webm' })
+        const contact = toRaw(this.activeContact)
+        if (contact) {
+          fetchSendFiles({ contact, files: file, type: 'record' }).then(r => {
+            if (r?.status === 'error') {
+              console.log('Send record error:', r)
+            }
+          })
+        }
+      }
+    },
+
+    /**
+     * 取消录音（不发送）
+     */
+    cancelRecord() {
+      if (!this.isRecording && this.recordActiveCount <= 0) return
+
+      // 标记为取消，强制停止所有录音状态
+      this.recordShouldCancel = true
+      this.recordActiveCount = 0
+      this.isRecording = false
+
+      // 停止计时器
+      if (this.recordTimer) {
+        clearInterval(this.recordTimer)
+        this.recordTimer = null
+      }
+
+      // 停止 MediaRecorder
+      if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
+        this.mediaRecorder.stop()
+      }
+      this.mediaRecorder = null
+
+      this.recordDuration = 0
+      this.audioChunks = []
+    },
+
+    handleRecordIconMouseDown() {
+      this.incrRecord()
+      // 在 document 上注册 mouseup 监听，确保鼠标松开时能正确检测取消区域
+      document.addEventListener('mouseup', this.handleRecordIconDocMouseUp)
+    },
+
+    handleRecordIconDocMouseUp(e) {
+      document.removeEventListener('mouseup', this.handleRecordIconDocMouseUp)
+      // 检查鼠标松开时是否在取消按钮区域内
+      if (this.isHoveringCancel) {
+        this.recordShouldCancel = true
+      }
+      this.decrRecord()
+    },
+
+    handleWindowRecordKeyDown(e) {
+      if (!this.isShowRecordPanel) return
+      this.handleRecordPanelKeyDown(e)
+    },
+
+    handleWindowRecordKeyUp(e) {
+      if (!this.isShowRecordPanel) return
+      this.handleRecordPanelKeyUp(e)
+    },
+
+    handleRecordPanelKeyDown(e) {
+      if (e.key === 'Escape') {
+        if (this.isRecording) {
+          // 如果在录音，Esc取消录音，不退出面板
+          e.preventDefault()
+          this.cancelRecord()
+        } else {
+          // 不在录音，Esc退出录音面板
+          e.preventDefault()
+          this.isShowRecordPanel = false
+        }
+        return
+      }
+
+      // 空格键按下 - 增加激活源
+      if (e.key === ' ' || e.code === 'Space') {
+        if (!e.repeat) {
+          e.preventDefault()
+          this.incrRecord()
+        }
+      }
+    },
+
+    handleRecordPanelKeyUp(e) {
+      // 空格键松开 - 释放激活源
+      if (e.key === ' ' || e.code === 'Space') {
+        e.preventDefault()
+        this.decrRecord()
+      }
+    },
+
+    handleRecordCancelMouseEnter() {
+      this.isHoveringCancel = true
+    },
+
+    handleRecordCancelMouseLeave() {
+      this.isHoveringCancel = false
     }
   },
   computed: {
@@ -1840,6 +2096,23 @@ export default defineComponent({
       } else {
         this.remainGroupAtAll = undefined
       }
+    },
+    isShowRecordPanel(val) {
+      if (val) {
+        this.$nextTick(() => {
+          this.$refs.recordPanel?.focus()
+        })
+      } else {
+        // 退出录音面板时，如果正在录音则取消
+        if (this.isRecording) {
+          this.cancelRecord()
+        }
+        // 停止并释放录音流
+        if (this.recordStream) {
+          this.recordStream.getTracks().forEach(track => track.stop())
+          this.recordStream = null
+        }
+      }
     }
   }
 });
@@ -1907,156 +2180,195 @@ export default defineComponent({
       :height="180"
       :minHeight="140"
     >
-      <div class="message-input-controls">
-        <div class="message-input-controls-left">
-          <color-svg
-            src="/QQ/icons/expression_24.svg"
-            class="message-input-ctrl-icon"
-            ref="expressionControl"
-          ></color-svg>
-          <Tooltip
-            v-if="refReady"
-            :target="$refs.expressionControl.svg"
-            content="表情"
-          />
-          <Tooltip
-            v-if="refReady"
-            :target="$refs.expressionControl.svg"
-            :distance-from-target="6"
-            z-index="1001"
-            :always-exists="true"
-            min-left="(window.innerWidth <= 570) ? 5px : (var(--sidebar-width) + 5px)"
-            trigger="toggle"
-          >
-            <template #content>
-              <div class="message-input-expression-box tooltip-style">
-                <CustomScrollBar class="message-input-expression-scroller">
-                  <template v-for="(category, i) in emojiGroupList" :key="i">
-                    <p class="message-input-expression-category-title">
-                      {{ category.title }}
-                    </p>
-                    <div class="message-input-expression-category">
-                      <Tooltip
-                        :distance-from-target="0"
-                        use-target-slot
-                        v-for="(emoji, index) in category.list"
-                        :key="index"
-                        z-index="1002"
-                      >
-                        <template #target>
-                          <div
-                            class="message-input-expression-emoji-box"
-                            @click="this.handleExpressionInput"
-                            :data-emoji="emoji"
-                          >
-                            <img
-                              :src="getPngEmojiUrl(emoji, String(emoji) === '367' ? 0 : null)"
-                              alt=""
-                              :data-emoji-animation="getApngEmojiUrl(emoji) ? 'static' : ''"
-                            />
+      <div class="message-input-common-panel message-input-panel" :class="{ 'display-none': isShowRecordPanel }">
+        <div class="message-input-controls">
+          <div class="message-input-controls-left">
+            <color-svg
+              src="/QQ/icons/expression_24.svg"
+              class="message-input-ctrl-icon"
+              ref="expressionControl"
+            ></color-svg>
+            <Tooltip
+              v-if="refReady"
+              :target="$refs.expressionControl.svg"
+              content="表情"
+            />
+            <Tooltip
+              v-if="refReady"
+              :target="$refs.expressionControl.svg"
+              :distance-from-target="6"
+              z-index="1001"
+              :always-exists="true"
+              min-left="(window.innerWidth <= 570) ? 5px : (var(--sidebar-width) + 5px)"
+              trigger="toggle"
+            >
+              <template #content>
+                <div class="message-input-expression-box tooltip-style">
+                  <CustomScrollBar class="message-input-expression-scroller">
+                    <template v-for="(category, i) in emojiGroupList" :key="i">
+                      <p class="message-input-expression-category-title">
+                        {{ category.title }}
+                      </p>
+                      <div class="message-input-expression-category">
+                        <Tooltip
+                          :distance-from-target="0"
+                          use-target-slot
+                          v-for="(emoji, index) in category.list"
+                          :key="index"
+                          z-index="1002"
+                        >
+                          <template #target>
+                            <div
+                              class="message-input-expression-emoji-box"
+                              @click="this.handleExpressionInput"
+                              :data-emoji="emoji"
+                            >
+                              <img
+                                :src="getPngEmojiUrl(emoji, String(emoji) === '367' ? 0 : null)"
+                                alt=""
+                                :data-emoji-animation="getApngEmojiUrl(emoji) ? 'static' : ''"
+                              />
 
-                            <img
-                              v-if="getApngEmojiUrl(emoji)"
-                              :src="getApngEmojiUrl(emoji)"
-                              alt=""
-                              data-emoji-animation="animation"
-                            />
-                          </div>
-                        </template>
-                        <template #content>
-                          <div class="tooltip-style message-input-expression-emoji-tooltip"
-                               v-if="emojiDescribes[emoji]">
-                            {{ emojiDescribes[emoji] }}
-                          </div>
-                        </template>
-                      </Tooltip>
-                    </div>
-                  </template>
-                </CustomScrollBar>
-              </div>
-            </template>
-          </Tooltip>
+                              <img
+                                v-if="getApngEmojiUrl(emoji)"
+                                :src="getApngEmojiUrl(emoji)"
+                                alt=""
+                                data-emoji-animation="animation"
+                              />
+                            </div>
+                          </template>
+                          <template #content>
+                            <div class="tooltip-style message-input-expression-emoji-tooltip"
+                                 v-if="emojiDescribes[emoji]">
+                              {{ emojiDescribes[emoji] }}
+                            </div>
+                          </template>
+                        </Tooltip>
+                      </div>
+                    </template>
+                  </CustomScrollBar>
+                </div>
+              </template>
+            </Tooltip>
 
-          <color-svg
-            src="/QQ/icons/folder_24.svg"
-            class="message-input-ctrl-icon"
-            ref="folderControl"
-            @click="handleMessageInputSelectFiles"
-          ></color-svg>
-          <Tooltip
-            v-if="refReady"
-            :target="$refs.folderControl.svg"
-            content="文件"
-          />
+            <color-svg
+              src="/QQ/icons/folder_24.svg"
+              class="message-input-ctrl-icon"
+              ref="folderControl"
+              @click="handleMessageInputSelectFiles"
+            ></color-svg>
+            <Tooltip
+              v-if="refReady"
+              :target="$refs.folderControl.svg"
+              content="文件"
+            />
 
-          <color-svg
-            src="/QQ/icons/image_24.svg"
-            class="message-input-ctrl-icon"
-            ref="imageControl"
-            @click="handleMessageInputSelectImages"
-          ></color-svg>
-          <Tooltip
-            v-if="refReady"
-            :target="$refs.imageControl.svg"
-            content="图片"
-          />
+            <color-svg
+              src="/QQ/icons/image_24.svg"
+              class="message-input-ctrl-icon"
+              ref="imageControl"
+              @click="handleMessageInputSelectImages"
+            ></color-svg>
+            <Tooltip
+              v-if="refReady"
+              :target="$refs.imageControl.svg"
+              content="图片"
+            />
 
 
-          <Tooltip
-            v-if="activeContact?.type === 'private' && false"
-            content="窗口抖动"
-            use-target-slot
-          >
-            <template #target>
-              <color-svg
-                src="/QQ/icons/shake_24.svg"
-                class="message-input-ctrl-icon"
-                ref="shakeControl"
-                @click="handleMessageInputShake"
-              ></color-svg>
-            </template>
-          </Tooltip>
+            <Tooltip
+              v-if="activeContact?.type === 'private' && false"
+              content="窗口抖动"
+              use-target-slot
+            >
+              <template #target>
+                <color-svg
+                  src="/QQ/icons/shake_24.svg"
+                  class="message-input-ctrl-icon"
+                  ref="shakeControl"
+                  @click="handleMessageInputShake"
+                ></color-svg>
+              </template>
+            </Tooltip>
+
+            <color-svg
+              src="/QQ/icons/microphone_on_24.svg"
+              class="message-input-ctrl-icon"
+              ref="recordPanelControl"
+              @click="handleOpenRecordPanel"
+            ></color-svg>
+            <Tooltip
+              v-if="refReady"
+              :target="$refs.recordPanelControl.svg"
+              content="语言消息"
+            />
+          </div>
+
+
+          <div class="message-input-controls-right">
+            <Tooltip
+              v-if="currentFilesUploadTasks?.length"
+              content="文件上传列表"
+              use-target-slot
+            >
+              <template #target>
+                <color-svg
+                  src="/QQ/icons/files_24.svg"
+                  class="message-input-ctrl-icon"
+                  ref="filesUploadControl"
+                  @click="handleFilesUploadTasksViewer"
+                ></color-svg>
+              </template>
+            </Tooltip>
+          </div>
         </div>
 
+        <CustomScrollBar class="message-input-scroller">
+          <InputQuote :msg="quotedMessage" v-if="quotedMessage"
+                      @cancel-quote-message="quotedMessage=null" ref="inputQuote"></InputQuote>
+          <div
+            ref="editor"
+            contenteditable
+            class="message-input-editor"
+            @paste="handlePaste"
+            @dragover.prevent="handleDragOver"
+            @dragenter.prevent
+            @dragstart="handleDragStart"
+            @click="updateCaretPosition"
+            @keyup="updateCaretPosition"
+            @keydown="handleKeyDown"
+            @input="handleInput"
+          ></div>
+        </CustomScrollBar>
 
-        <div class="message-input-controls-right">
-          <Tooltip
-            v-if="currentFilesUploadTasks?.length"
-            content="文件上传列表"
-            use-target-slot
-          >
-            <template #target>
-              <color-svg
-                src="/QQ/icons/files_24.svg"
-                class="message-input-ctrl-icon"
-                ref="filesUploadControl"
-                @click="handleFilesUploadTasksViewer"
-              ></color-svg>
-            </template>
-          </Tooltip>
+        <div class="message-input-send-button-container">
+          <div class="message-input-send-button" @click="handleSendMessage">发送</div>
         </div>
       </div>
-
-      <CustomScrollBar class="message-input-scroller">
-        <InputQuote :msg="quotedMessage" v-if="quotedMessage"
-                    @cancel-quote-message="quotedMessage=null" ref="inputQuote"></InputQuote>
-        <div
-          ref="editor"
-          contenteditable
-          class="message-input-editor"
-          @paste="handlePaste"
-          @dragover.prevent="handleDragOver"
-          @dragenter.prevent
-          @dragstart="handleDragStart"
-          @click="updateCaretPosition"
-          @keyup="updateCaretPosition"
-          @keydown="handleKeyDown"
-          @input="handleInput"
-        ></div>
-      </CustomScrollBar>
-
-      <div class="message-input-send-button-container">
-        <div class="message-input-send-button" @click="handleSendMessage">发送</div>
+      <div class="message-input-record-panel message-input-panel"
+           :class="{ 'display-flex': isShowRecordPanel }"
+           tabindex="-1"
+           ref="recordPanel"
+           @keydown="handleRecordPanelKeyDown"
+           @keyup="handleRecordPanelKeyUp">
+        <div class="message-input-record-timer">{{ formatRecordTime(recordDuration) }}</div>
+        <div class="message-input-record-microphone-container"
+             @mousedown="handleRecordIconMouseDown"
+             @mouseleave="isHoveringCancel = false">
+          <RecordMicrophoneIcon :active="isRecording"/>
+        </div>
+        <div class="text-muted message-input-record-hint">
+          <template v-if="isRecording">
+            松手发送，按 Esc 或点击<span @click="cancelRecord"
+                                        @mouseenter="handleRecordCancelMouseEnter"
+                                        @mouseleave="handleRecordCancelMouseLeave"
+                                        class="message-input-record-cancel">取消发送</span>
+          </template>
+          <template v-else>
+            按住空格开始说话，按 Esc 键或点击<span @click="isShowRecordPanel = false"
+                                                  class="message-input-record-exit">退出</span>
+          </template>
+        </div>
       </div>
     </vue-resizable>
   </div>
@@ -2074,11 +2386,7 @@ export default defineComponent({
   top: 0 !important;
   max-height: 100%;
   padding: 0;
-  display: flex;
-  flex-direction: column;
   width: 100% !important;
-  align-items: stretch;
-  justify-content: flex-start;
 }
 
 .message-input-controls {
@@ -2304,6 +2612,51 @@ export default defineComponent({
 
 .at-group-all-members-icon-background {
   background-color: #0099ff;
+}
+
+.message-input-panel {
+  height: 100%;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  width: 100% !important;
+}
+
+.message-input-common-panel {
+  align-items: stretch;
+  justify-content: flex-start;
+
+}
+
+.message-input-record-panel {
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+
+.message-input-record-timer {
+  font-weight: 500;
+  color: #333;
+  font-variant-numeric: tabular-nums;
+}
+
+.message-input-record-hint {
+  font-size: 13px;
+}
+
+.message-input-record-microphone-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.message-input-record-exit,
+.message-input-record-cancel {
+  color: #2D77E5;
+  cursor: pointer;
 }
 </style>
 

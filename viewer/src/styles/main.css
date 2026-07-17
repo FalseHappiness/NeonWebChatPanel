@@ -18,6 +18,10 @@
     display: flex !important
 }
 
+.display-none {
+    display: none !important;
+}
+
 .justify-content-between {
     -webkit-box-pack: justify !important;
     -ms-flex-pack: justify !important;
