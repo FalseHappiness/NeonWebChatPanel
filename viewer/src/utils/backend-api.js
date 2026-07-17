@@ -21,17 +21,21 @@ if (import.meta.env.PROD) {
   wsUri = `${wsProtocol}//${host}/ws/frontend`;
 }
 
-const fetchAction = async (endpoint, data, signal) => {
+const fetchOptionsAction = async ({ endpoint, data, signal, timeout }) => {
   try {
     if (signal instanceof AbortController) {
       signal = signal.signal
     }
-    return await CalledEmitter.emit("sendAction", endpoint, data, signal)
+    return await CalledEmitter.emit("sendAction", endpoint, data, signal, timeout)
   } catch (e) {
     showToast("error", `Fetch action ${endpoint} error`);
     console.error(`Fetch action ${endpoint} error`, e);
     throw e;
   }
+}
+
+const fetchAction = async (endpoint, data, signal, timeout) => {
+  return await fetchOptionsAction({ endpoint, data, signal, timeout })
 }
 
 const fetchActionData = async (endpoint, params, signal) => {
@@ -194,46 +198,51 @@ const fetchForwardMessage = async (id) => {
  * @param {object} contact 联系人对象 { type: 'group'|'private', contact_id: number }
  * @param {string | Array} message 消息内容，字符串或消息段数组
  * @param {AbortSignal} signal 中断信号
+ * @param [timeout] 超时时间
  * @returns {Promise<any>} OneBot接口返回结果
  */
-const fetchSendMessage = async (contact, message, signal) => {
-    const isGroup = contact.type === 'group';
+const fetchSendMessageOptions = async ({ contact, message, signal, timeout = undefined }) => {
+  const isGroup = contact.type === 'group';
 
-    // 字符串JSON解析
-    message = typeof message === 'string' ? JSON.parse(message) : message;
+  // 字符串JSON解析
+  message = typeof message === 'string' ? JSON.parse(message) : message;
 
-    // 戳一戳特殊逻辑
-    if (Array.isArray(message) && message.length > 0) {
-      const firstSeg = message[0];
-      if (firstSeg.type === 'poke' && firstSeg.data) {
-        const pokeData = firstSeg.data;
-        const pokeUser = pokeData.user_id ?? -1;
-        const pokeGroup = pokeData.group_id ?? -1;
-        const pokeTarget = pokeData.target_id ?? -1;
+  // 戳一戳特殊逻辑
+  if (Array.isArray(message) && message.length > 0) {
+    const firstSeg = message[0];
+    if (firstSeg.type === 'poke' && firstSeg.data) {
+      const pokeData = firstSeg.data;
+      const pokeUser = pokeData.user_id ?? -1;
+      const pokeGroup = pokeData.group_id ?? -1;
+      const pokeTarget = pokeData.target_id ?? -1;
 
-        const reqData = {
-          user_id: pokeUser || pokeTarget,
-          target_id: pokeTarget || pokeUser,
-        };
-        if (pokeGroup !== -1) {
-          reqData.group_id = pokeGroup;
-        }
+      const reqData = {
+        user_id: pokeUser || pokeTarget,
+        target_id: pokeTarget || pokeUser,
+      };
+      if (pokeGroup !== -1) {
+        reqData.group_id = pokeGroup;
+      }
 
-        if (pokeUser !== -1) {
-          return await fetchAction("send_poke", reqData, signal);
-        }
+      if (pokeUser !== -1) {
+        return await fetchAction("send_poke", reqData, signal, timeout);
       }
     }
-
-    // 组装普通消息请求参数
-    const reqData = { message };
-    reqData[isGroup ? 'group_id' : 'user_id'] = contact.contact_id
-    // 拼接接口 endpoint
-    const endpoint = isGroup ? "send_group_msg" : "send_private_msg";
-
-    return await fetchAction(endpoint, reqData, signal);
   }
-;
+
+  // 组装普通消息请求参数
+  const reqData = { message };
+  reqData[isGroup ? 'group_id' : 'user_id'] = contact.contact_id
+  // 拼接接口 endpoint
+  const endpoint = isGroup ? "send_group_msg" : "send_private_msg";
+
+  return await fetchAction(endpoint, reqData, signal);
+}
+
+
+const fetchSendMessage = async (contact, message, signal) => {
+  return await fetchSendMessageOptions({ contact, message, signal })
+}
 
 const fetchEssenceMessages = async (group_id, only_real_seq) => {
   const data = convertEssenceMsgListSL(await fetchActionData('get_essence_msg_list', { group_id, only_real_seq }))
@@ -284,7 +293,7 @@ const fetchSendFiles = async ({ contact, files, signal, controller, type = 'file
     if (signal?.aborted || signal?.signal?.aborted) {
       return
     }
-    return await fetchSendMessage(contact, message, signal)
+    return await fetchSendMessageOptions({ contact, message, signal, timeout: 20 * 60 * 1000 })
   }
 }
 

@@ -94,11 +94,12 @@ class FrontendConnectionManager:
 
             action = message.get("action", "")
             params = message.get("params", {})
+            timeout = params.get("timeout", 60)
 
             # print(f"前端请求 action: {action}, params: {params}")
 
             try:
-                result = await self.onebot_manager.call_action(action, params)
+                result = await self.onebot_manager.call_action(action, params, timeout)
                 # print(f"action 响应: {action} -> {result}")
 
                 response = {

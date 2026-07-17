@@ -18,6 +18,135 @@ export function useWebSocket(url, { onMessage, onNewContact, onNotice }) {
   // 存储正在等待响应的 req_backend 回调
   const pendingBackendRequests = new Map()
 
+  /**
+   * 通用WebSocket请求底层方法（抽取sendAction/reqBackend重复逻辑）
+   * @param {object} options - 请求配置
+   * @param {string} options.type - 请求类型 send_action / req_backend
+   * @param {string} [options.action] - action名称（send_action专用）
+   * @param {string} [options.endpoint] - 后端接口地址（req_backend专用）
+   * @param {object} options.params - 请求参数
+   * @param signal - 终止信号
+   * @param {number} timeout - 超时时间(毫秒)
+   * @param {Map} pendingMap -  pending回调存储Map
+   * @<any>} 请求响应数据
+   */
+  const _commonWebSocketRequest = (options, signal, timeout, pendingMap) => {
+    return new Promise((resolve, reject) => {
+      if (!socket.value || socket.value.readyState !== WebSocket.OPEN) {
+        reject(new Error('WebSocket is not connected'))
+        return
+      }
+
+      // 如果信号已经中止，立即拒绝
+      if (signal && signal.aborted) {
+        reject(new DOMException('The operation was aborted', 'AbortError'))
+        return
+      }
+
+      const echo = nanoid()
+
+      // 清理 abort 事件监听
+      const cleanup = () => {
+        if (signal) {
+          signal.removeEventListener('abort', onAbort)
+        }
+      }
+
+      // 监听 abort 信号
+      const onAbort = () => {
+        if (pendingMap.has(echo)) {
+          pendingMap.delete(echo)
+          cleanup()
+          // 通知后端取消该请求
+          if (socket.value && socket.value.readyState === WebSocket.OPEN) {
+            socket.value.send(JSON.stringify({
+              type: 'cancel_action',
+              echo: echo
+            }))
+          }
+          reject(new DOMException('The operation was aborted', 'AbortError'))
+        }
+      }
+
+      if (signal) {
+        signal.addEventListener('abort', onAbort, { once: true })
+      }
+
+      // 存储回调、清理方法
+      pendingMap.set(echo, { resolve, reject, cleanup })
+
+      // 超时处理
+      setTimeout(() => {
+        if (pendingMap.has(echo)) {
+          pendingMap.delete(echo)
+          cleanup()
+          const tipText = options.action || options.endpoint
+          reject(new Error(`${tipText} timed out after ${timeout}ms`))
+        }
+      }, timeout)
+
+      // 组装请求报文
+      const sendData = {
+        type: options.type,
+        echo: echo,
+        timeout: timeout / 1000,
+        params: options.params
+      }
+      // 差异化参数赋值
+      if (options.type === 'send_action') {
+        sendData.action = options.action
+      }
+      if (options.type === 'req_backend') {
+        sendData.endpoint = options.endpoint
+      }
+
+      // 发送请求
+      socket.value.send(JSON.stringify(sendData))
+    })
+  }
+
+  /**
+   * 通过 WebSocket 发送 action 请求并等待响应
+   * @param {string} action - OneBot action 名称
+   * @param {object} params - action 参数
+   * @param signal          - 终止信号
+   * @param {number} timeout - 超时时间(毫秒)
+   <any>} action 响应数据
+   */
+  const sendAction = (action, params = {}, signal = undefined, timeout = 60 * 1000) => {
+    return _commonWebSocketRequest(
+      {
+        type: 'send_action',
+        action,
+        params
+      },
+      signal,
+      timeout,
+      pendingActions
+    )
+  }
+
+  /**
+   * 通过 WebSocket 发送 req_backend 请求并等待响应
+   * @param {string} endpoint - 后端 endpoint 名称 (contacts / get_msg / messages / sync)
+   * @param {object} params - 请求参数
+   * @param signal          - 终止信号
+   * @param {number} timeout - 超时时间(毫秒)
+   * @returns {<any>} 后端响应数据
+   */
+  const reqBackend = (endpoint, params = {}, signal = undefined, timeout = 60 * 1000) => {
+    return _commonWebSocketRequest(
+      {
+        type: 'req_backend',
+        endpoint,
+        params
+      },
+      signal,
+      timeout,
+      pendingBackendRequests
+    )
+  }
+
   const onReceiveMessage = (message, echo_msg = false) => {
     try {
       // 检查是否是 send_action 的响应
@@ -56,150 +185,6 @@ export function useWebSocket(url, { onMessage, onNewContact, onNotice }) {
     } catch (error) {
       console.error('Error parsing WebSocket message:', error)
     }
-  }
-
-  /**
-   * 通过 WebSocket 发送 action 请求并等待响应
-   * @param {string} action - OneBot action 名称
-   * @param {object} params - action 参数
-   * @param signal          - 终止信号
-   * @param {number} timeout - 超时时间(毫秒)
-   * @returns {Promise<any>} action 响应数据
-   */
-  const sendAction = (action, params = {}, signal = undefined, timeout = 600000) => {
-    return new Promise((resolve, reject) => {
-      if (!socket.value || socket.value.readyState !== WebSocket.OPEN) {
-        reject(new Error('WebSocket is not connected'))
-        return
-      }
-
-      // 如果信号已经中止，立即拒绝
-      if (signal && signal.aborted) {
-        reject(new DOMException('The operation was aborted', 'AbortError'))
-        return
-      }
-
-      const echo = nanoid()
-
-      // 清理 abort 事件监听
-      const cleanup = () => {
-        if (signal) {
-          signal.removeEventListener('abort', onAbort)
-        }
-      }
-
-      // 监听 abort 信号
-      const onAbort = () => {
-        if (pendingActions.has(echo)) {
-          pendingActions.delete(echo)
-          cleanup()
-          // 通知后端取消该 action
-          if (socket.value && socket.value.readyState === WebSocket.OPEN) {
-            socket.value.send(JSON.stringify({
-              type: 'cancel_action',
-              echo: echo
-            }))
-          }
-          reject(new DOMException('The operation was aborted', 'AbortError'))
-        }
-      }
-
-      if (signal) {
-        signal.addEventListener('abort', onAbort, { once: true })
-      }
-
-      pendingActions.set(echo, { resolve, reject, cleanup })
-
-      // 超时处理
-      setTimeout(() => {
-        if (pendingActions.has(echo)) {
-          pendingActions.delete(echo)
-          cleanup()
-          reject(new Error(`Action "${action}" timed out after ${timeout}ms`))
-        }
-      }, timeout)
-
-      // 发送请求
-      socket.value.send(JSON.stringify({
-        type: 'send_action',
-        action: action,
-        params: params,
-        echo: echo
-      }))
-
-      // console.log(`[sendAction] 发送 action: ${action}`, params)
-    })
-  }
-
-  /**
-   * 通过 WebSocket 发送 req_backend 请求并等待响应
-   * @param {string} endpoint - 后端 endpoint 名称 (contacts / get_msg / messages / sync)
-   * @param {object} params - 请求参数
-   * @param signal          - 终止信号
-   * @param {number} timeout - 超时时间(毫秒)
-   * @returns {Promise<any>} 后端响应数据
-   */
-  const reqBackend = (endpoint, params = {}, signal = undefined, timeout = 600000) => {
-    return new Promise((resolve, reject) => {
-      if (!socket.value || socket.value.readyState !== WebSocket.OPEN) {
-        reject(new Error('WebSocket is not connected'))
-        return
-      }
-
-      // 如果信号已经中止，立即拒绝
-      if (signal && signal.aborted) {
-        reject(new DOMException('The operation was aborted', 'AbortError'))
-        return
-      }
-
-      const echo = nanoid()
-
-      // 清理 abort 事件监听
-      const cleanup = () => {
-        if (signal) {
-          signal.removeEventListener('abort', onAbort)
-        }
-      }
-
-      // 监听 abort 信号
-      const onAbort = () => {
-        if (pendingBackendRequests.has(echo)) {
-          pendingBackendRequests.delete(echo)
-          cleanup()
-          // 通知后端取消该请求
-          if (socket.value && socket.value.readyState === WebSocket.OPEN) {
-            socket.value.send(JSON.stringify({
-              type: 'cancel_action',
-              echo: echo
-            }))
-          }
-          reject(new DOMException('The operation was aborted', 'AbortError'))
-        }
-      }
-
-      if (signal) {
-        signal.addEventListener('abort', onAbort, { once: true })
-      }
-
-      pendingBackendRequests.set(echo, { resolve, reject, cleanup })
-
-      // 超时处理
-      setTimeout(() => {
-        if (pendingBackendRequests.has(echo)) {
-          pendingBackendRequests.delete(echo)
-          cleanup()
-          reject(new Error(`reqBackend "${endpoint}" timed out after ${timeout}ms`))
-        }
-      }, timeout)
-
-      // 发送请求
-      socket.value.send(JSON.stringify({
-        type: 'req_backend',
-        endpoint: endpoint,
-        params: params,
-        echo: echo
-      }))
-    })
   }
 
   // 同步新消息

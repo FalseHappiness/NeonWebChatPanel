@@ -149,7 +149,7 @@ export default defineComponent({
                   <span class="status-error">出错: {{ task.error }}</span>
                 </template>
                 <!-- 已取消 -->
-                <template v-if="isTaskCancelled(task)">
+                <template v-else-if="isTaskCancelled(task)">
                   <span class="status-cancelled">已取消</span>
                 </template>
                 <!-- 已完成 -->
@@ -256,6 +256,7 @@ export default defineComponent({
   flex-wrap: wrap;
   align-items: center;
   color: #888;
+  word-break: break-all;
 }
 
 .status-uploading {

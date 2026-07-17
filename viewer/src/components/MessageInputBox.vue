@@ -1,5 +1,5 @@
 <script>
-import { defineComponent, toRaw, inject } from 'vue'
+import { defineComponent, toRaw } from 'vue'
 import VueResizable from 'vue-resizable/src/components/vue-resizable.vue';
 import ColorSvg from "./utils/ColorSvg.vue";
 import SimpleBar from "simplebar-vue";
@@ -7,12 +7,11 @@ import 'simplebar-vue/dist/simplebar.min.css';
 import Tooltip from "./utils/Tooltip.vue";
 import { useGlobalStore } from "../store/global.js";
 import {
-  fetchDisplayName,
-  fetchForwardSingleMsg, fetchRemainGroupAtAll,
+  fetchForwardSingleMsg,
+  fetchRemainGroupAtAll,
   fetchSendFiles,
   fetchSendFileStream,
-  fetchSendMessage,
-  getGroupUsers
+  fetchSendMessage
 } from "../utils/backend-api.js";
 import InputQuote from "./InputQuote.vue";
 import VirtualScroller from "./utils/VirtualScroller.vue";
@@ -321,36 +320,46 @@ export default defineComponent({
     },
 
     async handleDocumentDrop(e) {
-      this.isDropRecordFiles = false
-      const isChatContainer = e.target?.closest('.chat-container')
-      const isRecordPanel = e.target?.closest(".message-input-record-panel")
+      const target = e.target
+      if (!target) {
+        return;
+      }
+      const isEditor = this.$refs.editor?.contains(target)
+      const isChatContainer = target?.closest('.chat-container')
+      const isRecord = target?.closest(".message-input-record-panel") || target?.closest(".message-input-ctrl-icon-microphone")
       // 检查是否是在编辑器内发生的拖放
-      if (this.$refs.editor?.contains(e.target)) {
+      if (isEditor || isChatContainer || isRecord) {
+        this.isDropRecordFiles = false
         e.preventDefault();
-        await this.handleDrop(e);
-      } else if (isChatContainer || isRecordPanel) {
-        e.preventDefault();
-        let files = await this.processDataTransferItems(e.dataTransfer.items)
-        files = files
-          .filter(item => item.kind === 'file')
-          .map(item => item.data)
-        if (files) {
-          const filteredFiles = files.filter(file => file.size)
-          if (filteredFiles.length !== files.length) {
-            showToast('info', '已自动过滤空文件/文件夹')
+        if (isEditor) {
+          await this.handleDrop(e);
+        } else if (isChatContainer || isRecord) {
+          await this.handleDropFiles(e, isRecord)
+        }
+      }
+    },
+
+    async handleDropFiles(e, isRecord) {
+      let files = await this.processDataTransferItems(e.dataTransfer.items)
+      files = files
+        .filter(item => item.kind === 'file')
+        .map(item => item.data)
+      if (files) {
+        const filteredFiles = files.filter(file => file.size)
+        if (filteredFiles.length !== files.length) {
+          showToast('info', '已自动过滤空文件/文件夹')
+        }
+        // ✅ isRecord 额外过滤：只保留音频文件
+        if (isRecord) {
+          const audioFiles = filteredFiles.filter(file => file.type.startsWith('audio/'))
+          if (audioFiles.length !== filteredFiles.length) {
+            showToast('info', '已自动过滤非音频文件')
           }
-          // ✅ isRecordPanel 额外过滤：只保留音频文件
-          if (isRecordPanel) {
-            const audioFiles = filteredFiles.filter(file => file.type.startsWith('audio/'))
-            if (audioFiles.length !== filteredFiles.length) {
-              showToast('info', '已自动过滤非音频文件')
-            }
-            this.isDropRecordFiles = true
-            this.draggedFiles = audioFiles
-          } else {
-            // 聊天面板保持原样
-            this.draggedFiles = filteredFiles
-          }
+          this.isDropRecordFiles = true
+          this.draggedFiles = audioFiles
+        } else {
+          // 聊天面板保持原样
+          this.draggedFiles = filteredFiles
         }
       }
     },
@@ -388,7 +397,8 @@ export default defineComponent({
           task_id,
           completed: false,
           cancelled: false,
-          type
+          create_time: Date.now(),
+          type,
         })
         const task = this.filesUploadTasks.find(t => t.task_id === task_id)
         controller.signal.onabort = () => {
@@ -406,6 +416,7 @@ export default defineComponent({
           contact,
           controller,
           file,
+          create_time: Date.now(),
           chunked: true,
           start_timestamp: undefined,
           chunk_size: undefined,
@@ -526,18 +537,16 @@ export default defineComponent({
           if (filteredFiles.length !== files.length) {
             showToast('info', '已自动过滤空文件/文件夹')
           }
-          files = await this.convertDataTransferImageItems(filteredFiles)
-          const fileKinds = files
+          const fileKinds = filteredFiles
             .filter(item => item.kind === 'file' && (!item.type.startsWith('image/') || item.errorImage))
             .map(item => item.data)
           if (fileKinds?.length) {
-            this.draggedFiles = files.filter(item => item.kind === 'file')
+            this.draggedFiles = files.filter(item => item.kind === 'file').map(item => item.data)
           } else {
+            files = await this.convertDataTransferImageItems(filteredFiles)
             await this.insertDataTransferItemsAtCursor(files)
           }
         }
-
-        return;
       }
 
       // 2. 处理内部内容移动（多元素）
@@ -1806,8 +1815,7 @@ export default defineComponent({
 
     async requestRecordPermission() {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-        return stream
+        return await navigator.mediaDevices.getUserMedia({ audio: true })
       } catch (err) {
         console.error('获取录音权限失败:', err)
         showErrorToast('获取录音权限失败')
@@ -1816,32 +1824,43 @@ export default defineComponent({
     },
 
     /**
-     * 打开录音面板前先获取权限，只有获取到权限才切换到面板
+     * 打开录音面板（始终切换，不阻塞权限获取）
+     * 仍然请求权限，但即使没有权限也切换到面板（方便拖放音频文件到面板上）
      */
     async handleOpenRecordPanel() {
       if (this.isShowRecordPanel) return
+      // 先切换到面板，不阻塞
+      this.isShowRecordPanel = true
+      // 尝试获取权限，但不阻塞面板显示
       const stream = await this.requestRecordPermission()
       if (stream) {
         this.recordStream = stream
-        this.isShowRecordPanel = true
       }
     },
 
     /**
      * 增加一个录音激活源，只有当所有激活源都释放后录音才会停止
+     * 如果没有已缓存的流，尝试获取权限，获取不到则不能开始录音
      */
-    incrRecord() {
+    async incrRecord() {
       if (!this.activeContact) return
       // 防止重复录音
       if (this.isRecording) return
       this.recordActiveCount++
       if (this.recordActiveCount === 1) {
-        // 首次激活，使用已缓存的流（从面板打开时获取），无需重新申请权限
-        const stream = this.recordStream
+        // 首次激活，使用已缓存的流（从面板打开时获取）
+        let stream = this.recordStream
+        // 如果没有流，尝试获取权限
+        if (!stream) {
+          stream = await this.requestRecordPermission()
+        }
+        // 没有权限，不能开始录音
         if (!stream) {
           this.recordActiveCount = 0
           return
         }
+        // 缓存流，方便后续复用
+        this.recordStream = stream
         this.isRecording = true
         this.recordShouldCancel = false
         this.audioChunks = []
@@ -1965,8 +1984,8 @@ export default defineComponent({
       this.audioChunks = []
     },
 
-    handleRecordIconMouseDown() {
-      this.incrRecord()
+    async handleRecordIconMouseDown() {
+      await this.incrRecord()
       // 在 document 上注册 mouseup 监听，确保鼠标松开时能正确检测取消区域
       document.addEventListener('mouseup', this.handleRecordIconDocMouseUp)
     },
@@ -1990,7 +2009,7 @@ export default defineComponent({
       this.handleRecordPanelKeyUp(e)
     },
 
-    handleRecordPanelKeyDown(e) {
+    async handleRecordPanelKeyDown(e) {
       if (e.key === 'Escape') {
         if (this.isRecording) {
           // 如果在录音，Esc取消录音，不退出面板
@@ -2008,7 +2027,7 @@ export default defineComponent({
       if (e.key === ' ' || e.code === 'Space') {
         if (!e.repeat) {
           e.preventDefault()
-          this.incrRecord()
+          await this.incrRecord()
         }
       }
     },
@@ -2109,10 +2128,15 @@ export default defineComponent({
     },
 
     currentFilesUploadTasks() {
-      return this.filesUploadTasks.filter(task => {
-        const { type, contact_id } = task.contact;
-        return type === this.activeContact?.type && contact_id === this.activeContact?.contact_id;
-      });
+      return this.filesUploadTasks
+        .filter(task => {
+          const { type, contact_id } = task.contact;
+          return type === this.activeContact?.type && contact_id === this.activeContact?.contact_id;
+        })
+        .sort((a, b) => {
+          // create_time 是 Date.now() 格式（毫秒时间戳，数字）
+          return b.create_time - a.create_time;
+        });
     }
 
   },
@@ -2329,7 +2353,7 @@ export default defineComponent({
 
             <color-svg
               src="/QQ/icons/microphone_on_24.svg"
-              class="message-input-ctrl-icon"
+              class="message-input-ctrl-icon message-input-ctrl-icon-microphone"
               ref="recordPanelControl"
               @click="handleOpenRecordPanel"
             ></color-svg>
@@ -2387,6 +2411,24 @@ export default defineComponent({
            ref="recordPanel"
            @keydown="handleRecordPanelKeyDown"
            @keyup="handleRecordPanelKeyUp">
+        <div class="message-input-controls">
+          <div class="message-input-controls-right">
+            <Tooltip
+              v-if="currentFilesUploadTasks?.filter(task=>task?.type==='record')?.length"
+              content="音频上传列表"
+              use-target-slot
+            >
+              <template #target>
+                <color-svg
+                  src="/QQ/icons/files_24.svg"
+                  class="message-input-ctrl-icon"
+                  ref="filesUploadControl"
+                  @click="handleFilesUploadTasksViewer"
+                ></color-svg>
+              </template>
+            </Tooltip>
+          </div>
+        </div>
         <div class="message-input-record-timer">{{ formatRecordTime(recordDuration) }}</div>
         <div class="message-input-record-microphone-container"
              @mousedown="handleRecordIconMouseDown"
@@ -2693,6 +2735,12 @@ export default defineComponent({
 .message-input-record-cancel {
   color: #2D77E5;
   cursor: pointer;
+}
+
+.message-input-record-panel .message-input-controls {
+  position: absolute;
+  right: 0;
+  top: 0;
 }
 </style>
 
