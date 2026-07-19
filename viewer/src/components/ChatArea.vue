@@ -18,6 +18,8 @@ import { Emitter } from "../composables/event-bus.js";
 import GroupNoticesShower from "./GroupNoticesShower.vue";
 import EnterArrow from "./utils/EnterArrow.vue";
 import GroupEssenceMsgViewer from "./GroupEssenceMsgViewer.vue";
+import GroupFilesViewer from "./GroupFilesViewer.vue";
+import ColorSvg from "./utils/ColorSvg.vue";
 
 const props = defineProps({
   activeContact: Object,
@@ -457,6 +459,12 @@ const changeShowGroupEssenceList = (isShow = true) => {
   showGroupEssenceListViewer.value = isShow;
 }
 
+const showGroupFilesViewer = ref(false)
+
+const changeShowGroupFiles = (isShow = true) => {
+  showGroupFilesViewer.value = isShow
+}
+
 const initContactInfo = () => {
   // 组件挂载时获取名称
   getName()
@@ -497,6 +505,11 @@ onUnmounted(() => {
       :messages="essenceList"
       :on-close="() => changeShowGroupEssenceList(false)"
     />
+    <GroupFilesViewer
+      v-if="showGroupFilesViewer"
+      :group_id="activeContact?.contact_id"
+      :on-close="() => changeShowGroupFiles(false)"
+    />
 
     <div class="cannot-drag window-controls" v-if="false">
       <div class="window-control-btn window-control-minimize">
@@ -513,7 +526,7 @@ onUnmounted(() => {
     <div v-if="activeContact" class="border-bottom chat-area-head">
       <span class="chat-area-head-name" :class="{'text-error': isError}">
         <img class="chat-area-go-back-btn" alt="" src="/QQ/icons/arrow_left_24.svg"
-             @click="() => { selectContact(null) }">
+             @click="() => { showContactMore ? showContactMore = false : selectContact(null) }">
         <span class="chat-area-head-display-name" @click="handleClickShowContactInfo">{{ displayName }}</span>
         <span v-if="tempSession">&nbsp;</span>
         <small class="text-muted" v-if="tempSession" style="font-size: 100%">
@@ -552,6 +565,20 @@ onUnmounted(() => {
 
       <div class="chat-area-contact-more-area">
         群聊成员
+      </div>
+
+      <div class="chat-area-contact-more-area">
+        群应用
+        <div class="group-applications-list">
+          <div @click="changeShowGroupFiles()" class="group-app-list-app-container">
+            <img alt="" src="/QQ/icons/filelook_folder_16.svg" class="group-app-icon">
+            群文件
+          </div>
+          <div @click="changeShowGroupEssenceList()" class="group-app-list-app-container">
+            <ColorSvg src="/QQ/icons/essence_message_24.svg" class="group-app-icon" style="background: #ff9200;"/>
+            群精华
+          </div>
+        </div>
       </div>
 
       <div class="chat-area-contact-more-area with-title display-flex" data-title="群公告"
@@ -689,6 +716,7 @@ onUnmounted(() => {
   flex-direction: row;
   justify-content: space-between;
   align-items: center;
+  border-bottom: 1px solid #dee2e6;
 }
 
 .messages-container {
@@ -778,6 +806,7 @@ onUnmounted(() => {
 .chat-area-contact-more-area.display-flex {
   display: flex;
   align-items: center;
+  justify-content: space-between;
 }
 
 
@@ -826,6 +855,26 @@ onUnmounted(() => {
   outline: 1px solid #0099ff;
 }
 
+.group-applications-list {
+  padding: 8px 10px 0 10px;
+  display: flex;
+  gap: 15px;
+}
+
+.group-app-list-app-container {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  font-size: 12px;
+  gap: 3px;
+  cursor: pointer;
+}
+
+.group-app-icon {
+  width: 35px;
+  height: 35px;
+}
+
 @media (max-width: 570px) {
   .chat-area {
     position: absolute;
@@ -843,8 +892,6 @@ onUnmounted(() => {
   }
 
   .chat-area-head {
-    border-bottom: none !important;
-    background-color: #fdfdfd;
     height: 42px;
     align-items: center;
   }

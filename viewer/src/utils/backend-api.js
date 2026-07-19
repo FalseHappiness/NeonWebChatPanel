@@ -6,7 +6,12 @@ import { showToast } from "./toast.js";
 import { createSHA256 } from 'hash-wasm';
 import { nanoid } from 'nanoid';
 import { CalledEmitter } from "../composables/event-bus.js";
-import { convertEssenceMsgListSL, convertGroupAlbumListSL, convertWrappedMsgSL } from "./snow-luma-translator.js";
+import {
+  convertEssenceMsgListSL,
+  convertGroupAlbumListSL,
+  convertGroupFilesSL,
+  convertWrappedMsgSL
+} from "./snow-luma-translator.js";
 
 let apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
 let wsUri = import.meta.env.VITE_WS_URI;
@@ -513,6 +518,25 @@ const fetchAPIVersionInfo = async () => {
   return await fetchActionData("get_version_info")
 }
 
+const fetchGroupRootFiles = async (group_id) => {
+  return convertGroupFilesSL(await fetchActionData("get_group_root_files", { group_id, file_count: 114514 }))
+}
+
+const fetchGroupFolderFiles = async (group_id, folder_id) => {
+  if (!folder_id || folder_id === 'root') {
+    return await fetchGroupRootFiles(group_id)
+  }
+  return convertGroupFilesSL(await fetchActionData("get_group_files_by_folder", { group_id, folder_id, file_count: 114514 }))
+}
+
+const fetchGroupFileSysInfo = async (group_id) => {
+  return await fetchActionData("get_group_file_system_info", { group_id })
+}
+
+const fetchGroupFileUrl = async (group_id, file_id) => {
+  return (await fetchActionData("get_group_file_url", { group_id, file_id }))?.url
+}
+
 /**
  * 将 QQ 的 [em]e数字[/em] 格式还原为真实 Unicode 表情
  * @param {string} text - 包含 [em] 标签的原始字符串
@@ -863,6 +887,10 @@ const isSnowLuma = () => {
   return useGlobalStore().apiVersionInfo?.app_name?.includes("SnowLuma")
 }
 
+const getGroupFileProxyUrl = (group_id, file_id, name) => {
+  return `${apiBaseUrl}/api/proxy_group_file?group_id=${group_id}&file_id=${encodeURIComponent(file_id)}&name=${encodeURIComponent(name)}`
+}
+
 export {
   fetchDisplayName,
   fetchContacts,
@@ -903,4 +931,9 @@ export {
   fetchRemainGroupAtAll,
   getGroupNoticePicUrl,
   fetchAPIVersionInfo,
+  fetchGroupRootFiles,
+  fetchGroupFolderFiles,
+  fetchGroupFileSysInfo,
+  fetchGroupFileUrl,
+  getGroupFileProxyUrl,
 }

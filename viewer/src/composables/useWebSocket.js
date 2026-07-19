@@ -281,9 +281,13 @@ export function useWebSocket(url, { onMessage, onNewContact, onNotice }) {
       onReceiveMessage(JSON.parse(event.data), true)
     }
 
-    socket.value.onclose = () => {
+    socket.value.onclose = ev => {
       isConnected.value = false
       console.log('WebSocket disconnected')
+
+      // 区分：主动关闭 不再重连
+      // ev.code === 1000 是正常主动关闭
+      if (ev.code === 1000) return
 
       // 标记需要同步
       shouldSync.value = true

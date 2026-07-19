@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, onUnmounted, ref, watch, provide } from 'vue'
+import { onMounted, onUnmounted, ref, watch, onBeforeUnmount } from 'vue'
 import { useWebSocket } from './composables/useWebSocket'
 import ContactList from './components/ContactList.vue'
 import ChatArea from './components/ChatArea.vue'
@@ -361,12 +361,16 @@ onMounted(() => {
   CalledEmitter.on("reqBackend", reqBackend)
 });
 
-onUnmounted(() => {
+const destroy = () => {
   destroyContextMenu()
   socket.value?.close()
   CalledEmitter.off('sendAction')
   CalledEmitter.off('reqBackend')
-})
+}
+
+onBeforeUnmount(destroy)
+
+onUnmounted(destroy)
 </script>
 
 <template>

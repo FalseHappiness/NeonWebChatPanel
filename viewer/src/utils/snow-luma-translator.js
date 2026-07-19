@@ -143,13 +143,23 @@ const convertEssenceMsgListSL = list => {
 const convertGroupAlbumListSL = data => {
   const newData = []
   for (const item of data) {
-    
+
   }
   return newData
+}
+
+const convertGroupFilesSL = data => {
+  data?.folders?.forEach(v => {
+    if (v?.hasOwnProperty("create_name")) {
+      v.creator_name = v.create_name
+    }
+  })
+  return data
 }
 
 export {
   convertWrappedMsgSL,
   convertEssenceMsgListSL,
-  convertGroupAlbumListSL
+  convertGroupAlbumListSL,
+  convertGroupFilesSL
 }

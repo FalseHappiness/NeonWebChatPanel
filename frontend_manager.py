@@ -99,7 +99,7 @@ class FrontendConnectionManager:
             # print(f"前端请求 action: {action}, params: {params}")
 
             try:
-                result = await self.onebot_manager.call_action(action, params, timeout)
+                result = await self.onebot_manager.call_action(action, params, None, timeout)
                 # print(f"action 响应: {action} -> {result}")
 
                 response = {

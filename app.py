@@ -1,10 +1,15 @@
+import asyncio
 import base64
 import mimetypes
+import time
+import urllib
 from datetime import datetime
-from typing import Dict, Union, List, Any
+from typing import Dict, Union, List, Any, Optional, AsyncIterator
 
+import aiohttp
 import requests
-from fastapi import FastAPI, WebSocket, Depends, Request, Response, WebSocketException
+from fastapi import FastAPI, WebSocket, Depends, Request, Response, WebSocketException, HTTPException
+from fastapi.params import Header
 from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -580,10 +585,10 @@ def is_allowed_proxy_domain(target_url):
         domain = netloc.split(':')[0]  # 得到纯净域名
 
         # 完整匹配的域名列表
-        allowed_full_domains = ["multimedia.nt.qq.com.cn", "gxh.vip.qq.com"]
+        allowed_full_domains = ["multimedia.nt.qq.com.cn", "gxh.vip.qq.com", 'gzc-download.ftn.qq.com']
 
         # 允许的域名后缀列表
-        allowed_suffixes = ['.gtimg.cn', '.qpic.cn', '.ugcimg.cn']
+        allowed_suffixes = ['.gtimg.cn', '.qpic.cn', '.ugcimg.cn', '.ftn.qq.com']
 
         # 检查条件：完整匹配 或 符合允许的后缀
         return (
@@ -895,6 +900,205 @@ async def get_essence_msg_list(params: dict = Depends(get_request_params)):
         request_params=['group_id'],
         original_params=params,
         custom_handler=process_data
+    )
+
+
+# ===================== 简易内存缓存（支持滑动过期） =====================
+class TTLCache:
+    def __init__(self, ttl: int = 300):
+        self._store: Dict[str, Dict] = {}
+        self.ttl = ttl
+        self._lock = asyncio.Lock()
+
+    async def get(self, key: str) -> Optional[str]:
+        async with self._lock:
+            entry = self._store.get(key)
+            if entry and time.time() < entry["expire"]:
+                # 命中即续期（滑动过期）
+                entry["expire"] = time.time() + self.ttl
+                return entry["value"]
+            # 过期或不存在则清理
+            if entry:
+                del self._store[key]
+            return None
+
+    async def set(self, key: str, value: str) -> None:
+        async with self._lock:
+            self._store[key] = {
+                "value": value,
+                "expire": time.time() + self.ttl
+            }
+
+
+group_files_url_cache = TTLCache(ttl=600)  # 缓存 10 分钟，按需调整
+
+
+def get_content_disposition(filename: str, inline: bool = True) -> str:
+    """
+    兼容中文文件名，遵循 RFC 5987 标准，解决 latin-1 编码报错
+    inline=True 在线预览，inline=False 下载
+    """
+    # 基础 ascii 备用名（防止老浏览器兼容）
+    ascii_name = urllib.parse.quote(filename, safe="")
+    # RFC5987 编码文件名
+    encoded_name = urllib.parse.quote(filename, encoding="utf-8")
+    if inline:
+        return f'inline; filename="{ascii_name}"; filename*=utf-8\'\'{encoded_name}'
+    else:
+        return f'attachment; filename="{ascii_name}"; filename*=utf-8\'\'{encoded_name}'
+
+
+# ===================== 简易内存缓存（支持滑动过期） =====================
+class TTLCache:
+    def __init__(self, ttl: int = 300):
+        self._store: Dict[str, Dict] = {}
+        self.ttl = ttl
+        self._lock = asyncio.Lock()
+
+    async def get(self, key: str) -> Optional[str]:
+        async with self._lock:
+            entry = self._store.get(key)
+            # 修复：time.time() 加括号调用获取时间戳
+            if entry and time.time() < entry["expire"]:
+                # 命中即续期（滑动过期）
+                entry["expire"] = time.time() + self.ttl
+                return entry["value"]
+            # 过期或不存在则清理
+            if entry:
+                del self._store[key]
+            return None
+
+    async def set(self, key: str, value: str) -> None:
+        async with self._lock:
+            self._store[key] = {
+                "value": value,
+                "expire": time.time() + self.ttl
+            }
+
+
+group_files_url_cache = TTLCache(ttl=600)  # 缓存 10 分钟，按需调整
+
+
+def get_content_disposition(filename: str, inline: bool = True) -> str:
+    """
+    兼容中文文件名，遵循 RFC 5987 标准，解决 latin-1 编码报错
+    inline=True 在线预览，inline=False 下载
+    """
+    # 基础 ascii 备用名（防止老浏览器兼容）
+    ascii_name = urllib.parse.quote(filename, safe="")
+    # RFC5987 编码文件名
+    encoded_name = urllib.parse.quote(filename, encoding="utf-8")
+    if inline:
+        return f'inline; filename="{ascii_name}"; filename*=utf-8\'\'{encoded_name}'
+    else:
+        return f'attachment; filename="{ascii_name}"; filename*=utf-8\'\'{encoded_name}'
+
+
+# ===================== 核心流式代理工具（移除冗余ProxyResult + 修复版） =====================
+async def proxy_target_file(target_url: str, range_header: Optional[str] = None):
+    """
+    流式代理远程文件，正确透传 Range 响应头（Content-Range, Content-Length 等）
+    移除多余 ProxyResult 封装，直接返回原生参数
+    """
+    headers = {}
+    if range_header:
+        headers["Range"] = range_header
+
+    timeout = aiohttp.ClientTimeout(total=300)
+    session = aiohttp.ClientSession(timeout=timeout)
+    # 手动管理 session，以便在生成器中关闭
+    resp = await session.get(target_url, headers=headers)
+    if resp.status >= 400:
+        await session.close()
+        raise HTTPException(status_code=resp.status, detail="远程文件访问失败")
+
+    # 收集需要透传的关键响应头，剔除Content-Type防止覆盖本地media_type
+    proxy_headers = {}
+    pass_keys = ("Content-Range", "Content-Length", "Accept-Ranges", "ETag")
+    for key in pass_keys:
+        val = resp.headers.get(key)
+        if val:
+            proxy_headers[key] = val
+
+    async def chunk_generator():
+        try:
+            async for chunk in resp.content.iter_chunked(64 * 1024):
+                yield chunk
+        finally:
+            resp.release()
+            await session.close()
+
+    # 直接返回原生参数，无需封装类
+    return resp.status, proxy_headers, chunk_generator()
+
+
+# ===================== 接口实现 =====================
+@app.api_route("/api/proxy_group_file", methods=["GET", "POST"])
+async def proxy_group_file(
+        request_params: dict = Depends(get_request_params),
+        range_header: Optional[str] = Header(None, alias="Range")  # 正确捕获请求头 Range
+):
+    params = request_params  # 你的 get_request_params 应能解析 GET/POST 参数
+    target_url = params.get("url")
+    target_name = params.get("name")
+    file_id = params.get("file_id")
+    group_id = params.get("group_id")
+
+    # 分支1：直接传入代理URL
+    if target_url and is_allowed_proxy_domain(target_url):
+        pass
+    # 分支2：通过群ID+文件ID拉取真实文件链接（带缓存）
+    elif file_id and group_id:
+        cache_key = f"{group_id}:{file_id}"
+        cached_url = await group_files_url_cache.get(cache_key)
+        if cached_url:
+            target_url = cached_url
+        else:
+            result = await make_api_request(
+                endpoint='get_group_file_url',
+                request_params=['group_id', 'file_id'],
+                original_params=params,
+            )
+            if result.get("status") == 'ok':
+                target_url = result.get('data', {}).get("url")
+                if target_url:
+                    # 缓存原始链接
+                    await group_files_url_cache.set(cache_key, target_url)
+            else:
+                return result
+    # 无有效文件链接
+    if not target_url:
+        return {"status": "error", "message": "没有有效文件", "code": 400}
+
+    # ========== 精准识别音视频MIME ==========
+    media_type = "application/octet-stream"
+    if target_name:
+        mime_type, _ = mimetypes.guess_type(target_name)
+        if mime_type:
+            media_type = mime_type
+
+    # 2. 文件名处理
+    if not target_name:
+        parsed = urllib.parse.urlparse(target_url)
+        filename = parsed.path.split("/")[-1] or "file"
+        target_name = urllib.parse.unquote(filename)
+
+    # 3. 流式代理（含 Range 支持）
+    status_code, proxy_headers, body_iterator = await proxy_target_file(target_url, range_header)
+
+    # 4. 拼接响应头
+    response_headers = {
+        "Content-Disposition": get_content_disposition(target_name, inline=True),
+        "Accept-Ranges": "bytes",
+    }
+    # 合并远程返回的 Range 相关头部（不含Content-Type，避免覆盖）
+    response_headers.update(proxy_headers)
+
+    return StreamingResponse(
+        content=body_iterator,
+        status_code=status_code,
+        media_type=media_type,
+        headers=response_headers,
     )
 
 

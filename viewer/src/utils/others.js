@@ -345,11 +345,26 @@ const formatTimeOptions = ({
   return `${dateStr}${timeStr}`;
 };
 
+function triggerDownloadFile(url, name) {
+  const a = document.createElement('a')
+  a.style.display = 'none !important'
+  // 文件地址
+  a.href = url
+  // 指定下载文件名
+  a.download = name
+  // 模拟点击
+  document.body.appendChild(a)
+  a.click()
+  // 清理dom
+  document.body.removeChild(a)
+}
+
 export {
   hasMouseSupport,
   formatRelativeTime,
   sortGroupUsers,
   parseJSON,
   stringifyJSON,
-  formatTimeOptions
+  formatTimeOptions,
+  triggerDownloadFile,
 }
