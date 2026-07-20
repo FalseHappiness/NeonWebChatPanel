@@ -275,6 +275,20 @@ const parseMessage = (message) => {
     if (event.message && Array.isArray(event.message)) {
       const children = [];
 
+      if (event.message?.length) {
+        const newMessage = []
+        for (const item of event.message) {
+          if (item.type === 'record') {
+            const data = item.data
+            if (!data.file && !data.url) {
+              continue
+            }
+          }
+          newMessage.push(item)
+        }
+        event.message = newMessage
+      }
+
       if (event.message.length === 1) {
         const item = event.message[0];
         if (['dice', 'rps', 'face'].includes(item.type)) {

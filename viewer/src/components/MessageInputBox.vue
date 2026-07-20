@@ -1383,8 +1383,8 @@ export default defineComponent({
 
       fetchSendMessage(this.activeContact, message).then(r => {
         if (r?.status === 'error') {
-          showToast('发送消息失败')
           console.log('Send message error:', r)
+          showErrorToast('发送消息失败')
         }
       })
 

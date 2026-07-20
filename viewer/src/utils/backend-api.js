@@ -526,7 +526,11 @@ const fetchGroupFolderFiles = async (group_id, folder_id) => {
   if (!folder_id || folder_id === 'root') {
     return await fetchGroupRootFiles(group_id)
   }
-  return convertGroupFilesSL(await fetchActionData("get_group_files_by_folder", { group_id, folder_id, file_count: 114514 }))
+  return convertGroupFilesSL(await fetchActionData("get_group_files_by_folder", {
+    group_id,
+    folder_id,
+    file_count: 114514
+  }))
 }
 
 const fetchGroupFileSysInfo = async (group_id) => {
@@ -856,6 +860,10 @@ const getFileDataUrl = (file_id, type) => {
     type = data.type
     if (['video'].includes(type)) {
       type = 'file'
+    }
+    const url = data.data.url
+    if (url?.startsWith("data:")) {
+      return url;
     }
   }
 
