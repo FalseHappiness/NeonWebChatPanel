@@ -252,9 +252,10 @@ async def get_messages_core(params: dict):
         for idx, msg in enumerate(temp_merged_messages):
             # 如果有 real_seq，就用它作为键（重复时后面的覆盖前面的）
             real_seq = msg.get("real_seq", None) or msg.get("message_seq", None)
+            merged_key = f"{msg.get('post_type', None)}_{real_seq}"
             if ('real_seq' in msg or 'message_seq' in msg) and real_seq is not None:
                 msg['real_seq'] = real_seq
-                old_msg = merged.get(real_seq)
+                old_msg = merged.get(merged_key)
                 if isinstance(msg, dict):
                     event = msg.get('event')
                     if isinstance(event, str):
@@ -292,7 +293,7 @@ async def get_messages_core(params: dict):
                         except json.JSONDecodeError:
                             pass
 
-                merged[real_seq] = msg
+                merged[merged_key] = msg
             # 如果没有 real_seq，就用 (time, idx) 作为键（确保唯一性）
             else:
                 merged[(msg['time'], idx)] = msg
@@ -901,51 +902,6 @@ async def get_essence_msg_list(params: dict = Depends(get_request_params)):
         original_params=params,
         custom_handler=process_data
     )
-
-
-# ===================== 简易内存缓存（支持滑动过期） =====================
-class TTLCache:
-    def __init__(self, ttl: int = 300):
-        self._store: Dict[str, Dict] = {}
-        self.ttl = ttl
-        self._lock = asyncio.Lock()
-
-    async def get(self, key: str) -> Optional[str]:
-        async with self._lock:
-            entry = self._store.get(key)
-            if entry and time.time() < entry["expire"]:
-                # 命中即续期（滑动过期）
-                entry["expire"] = time.time() + self.ttl
-                return entry["value"]
-            # 过期或不存在则清理
-            if entry:
-                del self._store[key]
-            return None
-
-    async def set(self, key: str, value: str) -> None:
-        async with self._lock:
-            self._store[key] = {
-                "value": value,
-                "expire": time.time() + self.ttl
-            }
-
-
-group_files_url_cache = TTLCache(ttl=600)  # 缓存 10 分钟，按需调整
-
-
-def get_content_disposition(filename: str, inline: bool = True) -> str:
-    """
-    兼容中文文件名，遵循 RFC 5987 标准，解决 latin-1 编码报错
-    inline=True 在线预览，inline=False 下载
-    """
-    # 基础 ascii 备用名（防止老浏览器兼容）
-    ascii_name = urllib.parse.quote(filename, safe="")
-    # RFC5987 编码文件名
-    encoded_name = urllib.parse.quote(filename, encoding="utf-8")
-    if inline:
-        return f'inline; filename="{ascii_name}"; filename*=utf-8\'\'{encoded_name}'
-    else:
-        return f'attachment; filename="{ascii_name}"; filename*=utf-8\'\'{encoded_name}'
 
 
 # ===================== 简易内存缓存（支持滑动过期） =====================

@@ -179,7 +179,7 @@ class OneBotHandler:
                 return int(real_seq)
         return -1
 
-    async def get_messages(self, id, type, count=20, direction=None, message_id=0):
+    async def get_messages(self, id, type, count=20, direction=None, message_id=0, self_id=None):
         params = {
             "count": count,
             "message_seq": message_id,
@@ -190,12 +190,22 @@ class OneBotHandler:
             params['reverse_order'] = direction == 'prev'
         action = "get_group_msg_history" if type == "group" else "get_friend_msg_history"
 
+        if self_id is None:
+            if len(self.onebot_ws.active_connections) == 1:
+                self_id = next(iter(self.onebot_ws.active_connections.keys()))
+
         # print(action, params)
-        api_data = await self.onebot_ws.call_action(action, params)
+        api_data = await self.onebot_ws.call_action(action, params, self_id=self_id)
         if not api_data:
             return []
 
         messages = api_data.get("messages", [])
+
+        for msg in messages:
+            if 'post_type' not in msg:
+                msg['post_type'] = "message_sent" if msg.get("target_id", msg['user_id']) == int(self_id) else "message"
+            if 'self_id' not in msg:
+                msg['self_id'] = int(self_id)
 
         # 检查是否已经获取了足够数量的消息
         if len(messages) >= count:
@@ -216,7 +226,7 @@ class OneBotHandler:
 
         # 递归获取剩余的消息（remaining + 1 是为了避免重复）
         remaining_messages = await self.get_messages(
-            id, type, remaining + 1, direction, next_message_id
+            id, type, remaining + 1, direction, next_message_id, self_id
         )
 
         # 合并消息，并确保没有重复

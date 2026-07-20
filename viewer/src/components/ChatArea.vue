@@ -335,7 +335,7 @@ const findMessage = async (message_id) => {
   let msg;
   if (vm && Array.isArray(vm)) {
     msg = vm.find(
-      item => item.message_id === parseInt(message_id)
+      item => item.message_id === parseInt(message_id) && ['message', 'message_sent'].includes(item.post_type)
     )
   }
   const isEmptyObject = (obj) => {
@@ -628,7 +628,6 @@ onUnmounted(() => {
       :get-id-function="getMsgId"
       :detect-is-latest-msg-function="detectIsLatestMsg"
       :detect-is-oldest-msg-function="detectIsOldestMsg"
-      id-key="real_seq"
       :page-size="30"
       :at-bottom-distance="100"
       :get-newer-messages="getNewerMessages"
