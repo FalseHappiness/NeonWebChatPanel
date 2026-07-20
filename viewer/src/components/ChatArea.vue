@@ -575,7 +575,7 @@ onUnmounted(() => {
             群文件
           </div>
           <div @click="changeShowGroupEssenceList()" class="group-app-list-app-container">
-            <ColorSvg src="/QQ/icons/essence_message_24.svg" class="group-app-icon" style="background: #ff9200;"/>
+            <img alt="" src="/QQ/app/img/essence.bbb878de5480c01292f5.svg" class="group-app-icon"/>
             群精华
           </div>
         </div>
@@ -866,13 +866,13 @@ onUnmounted(() => {
   flex-direction: column;
   align-items: center;
   font-size: 12px;
-  gap: 3px;
+  gap: 5px;
   cursor: pointer;
 }
 
 .group-app-icon {
-  width: 35px;
-  height: 35px;
+  width: 30px;
+  height: 30px;
 }
 
 @media (max-width: 570px) {

@@ -10,10 +10,11 @@ import { formatTimeOptions } from "../utils/others.js";
 import { getFileIcon, formatFileSize } from "./MessageTypes/FileMessage.vue";
 import CustomScrollBar from "./utils/CustomScrollBar.vue";
 import SimplePopUp from "./utils/SimplePopUp.vue";
+import TruncatedText from "./utils/TruncatedText.vue";
 
 export default defineComponent({
   name: "GroupFilesViewer",
-  components: { SimplePopUp, CustomScrollBar },
+  components: { TruncatedText, SimplePopUp, CustomScrollBar },
   props: {
     group_id: {
       type: [Number, String],
@@ -51,6 +52,11 @@ export default defineComponent({
       if (this.pathStack.length === 0) return '根目录'
       return this.pathStack[this.pathStack.length - 1].folder_name
     },
+    // 存储空间使用百分比
+    storagePercent() {
+      if (!this.fileSysInfo || !this.fileSysInfo.total_space) return 0
+      return Math.min(100, (this.fileSysInfo.used_space / this.fileSysInfo.total_space) * 100)
+    },
     // 排序后的完整列表（文件夹 + 文件）
     sortedItems() {
       // 构建文件夹项
@@ -62,7 +68,11 @@ export default defineComponent({
         create_time: f.create_time || 0,
         creator: f.creator,
         creator_name: f.creator_name,
+        last_upload_time: f.last_upload_time,
+        last_uploader: f.last_uploader,
+        last_uploader_name: f.last_uploader_name,
         total_file_count: f.total_file_count,
+        modify_time: f.last_upload_time || 0,
         raw: f
       }))
 
@@ -81,15 +91,18 @@ export default defineComponent({
 
       // 排序函数
       const sortCompare = (a, b) => {
+        const isFolderA = a.type === 'folder'
+        const isFolderB = b.type === 'folder'
+        const isAllFolder = isFolderA && isFolderB
         switch (this.sortBy) {
           case 'new_first':
             return b.modify_time - a.modify_time
           case 'old_first':
             return a.modify_time - b.modify_time
           case 'large_first':
-            return b.file_size - a.file_size
+            return isAllFolder ? b.total_file_count - a.total_file_count : b.file_size - a.file_size
           case 'small_first':
-            return a.file_size - b.file_size
+            return isAllFolder ? a.total_file_count - b.total_file_count : a.file_size - b.file_size
           default:
             return 0
         }
@@ -102,10 +115,16 @@ export default defineComponent({
         return [...folderItems, ...fileItems]
       } else {
         // 混合排序
-        const allItems = [...folderItems, ...fileItems]
+        const allItems = [...fileItems]
+        if (!this.isSizeBasedSortBy) {
+          allItems.unshift(...folderItems)
+        }
         allItems.sort(sortCompare)
         return allItems
       }
+    },
+    isSizeBasedSortBy() {
+      return ['large_first', 'small_first'].includes(this.sortBy)
     }
   },
   methods: {
@@ -125,12 +144,7 @@ export default defineComponent({
       this.loading = true
       this.error = null
       try {
-        let data
-        if (!folder_id || folder_id === 'root') {
-          data = await fetchGroupRootFiles(this.group_id)
-        } else {
-          data = await fetchGroupFolderFiles(this.group_id, folder_id)
-        }
+        const data = await fetchGroupFolderFiles(this.group_id, folder_id)
         this.files = data.files || []
         this.folders = data.folders || []
       } catch (e) {
@@ -199,7 +213,7 @@ export default defineComponent({
         <!-- 工具栏 -->
         <div class="gv-toolbar">
           <!-- 面包屑导航 -->
-          <div class="gv-breadcrumb">
+          <div class="gv-breadcrumb no-scrollbar">
             <span class="gv-breadcrumb-item" @click="goToRoot">全部文件</span>
             <template v-for="(p, idx) in pathStack" :key="idx">
               <span class="gv-breadcrumb-sep">/</span>
@@ -215,19 +229,29 @@ export default defineComponent({
               <option value="large_first">从大到小</option>
               <option value="small_first">从小到大</option>
             </select>
-            <select v-model="folderOrder" class="gv-select" title="文件夹排列">
+            <select v-model="folderOrder" class="gv-select" title="文件夹排列" v-if="pathStack.length == 0">
               <option value="before">文件夹在前</option>
-              <option value="mixed">混合排序</option>
+              <option value="mixed">{{ isSizeBasedSortBy ? "隐藏文件夹" : "混合排序" }}</option>
             </select>
           </div>
         </div>
 
         <!-- 文件系统信息 -->
         <div v-if="fileSysInfo" class="gv-sys-info">
-          共 {{ fileSysInfo.file_count || 0 }} 个文件
-          <template v-if="fileSysInfo.limit_count">
-            ，上限 {{ fileSysInfo.limit_count }} 个
-          </template>
+          <div class="gv-sys-info-text">
+            共 {{ fileSysInfo.file_count || 0 }} 个文件
+            <template v-if="fileSysInfo.limit_count">
+              ，上限 {{ fileSysInfo.limit_count }} 个
+            </template>
+          </div>
+          <div class="gv-storage-bar-wrapper">
+            <div class="gv-storage-bar">
+              <div class="gv-storage-bar-used" :style="{ width: storagePercent + '%' }"></div>
+            </div>
+            <span class="gv-storage-text">
+              {{ formatFileSize(fileSysInfo.used_space) }} / {{ formatFileSize(fileSysInfo.total_space) }}
+            </span>
+          </div>
         </div>
 
         <!-- 加载中 -->
@@ -270,7 +294,7 @@ export default defineComponent({
 
             <!-- 信息 -->
             <div class="gv-item-info">
-              <div class="gv-item-name" :title="item.name">{{ item.name }}</div>
+              <TruncatedText :content="item.name" one-line class="gv-item-name"/>
               <div class="gv-item-meta two-lines" v-if="item.type === 'folder'">
                 <span class="gv-item-meta-text">{{ item.total_file_count }} 个文件</span>
                 <span class="gv-item-meta-text">{{ item.creator_name }} 创建于 {{ formatTime(item.create_time) }}</span>
@@ -280,9 +304,15 @@ export default defineComponent({
               </div>
             </div>
 
-            <div v-if="item.type === 'file'" class="gv-item-meta-upload-info">
-              <span class="gv-item-meta-text">{{ formatTime(item.modify_time) }}</span>
-              <span class="gv-item-meta-text">{{ item.uploader_name || item.uploader }}</span>
+            <div class="gv-item-meta-upload-info">
+              <template v-if="item.type === 'file'">
+                <span class="gv-item-meta-text">{{ formatTime(item.modify_time) }}</span>
+                <span class="gv-item-meta-text">来自: {{ item.uploader_name || item.uploader }}</span>
+              </template>
+              <template v-else>
+                <span class="gv-item-meta-text">{{ formatTime(item.last_upload_time) }}</span>
+                <span class="gv-item-meta-text">更新: {{ item.last_uploader_name || item.last_uploader }}</span>
+              </template>
             </div>
           </a>
         </CustomScrollBar>
@@ -307,31 +337,31 @@ export default defineComponent({
   height: 20px;
   position: absolute;
   right: 6px;
-  top: 2px;
+  top: 1px;
   cursor: pointer;
 }
 
 /* 工具栏 */
 .gv-toolbar {
-  padding: 8px 20px 4px 20px;
+  padding: 8px 20px 0 20px;
+  display: flex;
+  justify-content: space-between;
 }
 
 .gv-breadcrumb {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
   gap: 2px;
-  margin-bottom: 6px;
   font-size: 13px;
+  overflow-x: scroll;
+  margin-right: 6px;
+  flex: 1;
 }
 
 .gv-breadcrumb-item {
   color: #4A90D9;
   cursor: pointer;
   white-space: nowrap;
-  max-width: 120px;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .gv-breadcrumb-item:hover {
@@ -357,7 +387,7 @@ export default defineComponent({
 .gv-controls {
   display: flex;
   gap: 6px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
 .gv-select {
@@ -380,6 +410,34 @@ export default defineComponent({
   padding: 6px 20px;
   font-size: 12px;
   color: #999;
+}
+
+.gv-storage-bar-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.gv-storage-bar {
+  flex: 1;
+  height: 6px;
+  background: #E0E0E0;
+  border-radius: 3px;
+  overflow: hidden;
+  min-width: 100px;
+}
+
+.gv-storage-bar-used {
+  height: 100%;
+  background: #0099ff;
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.gv-storage-text {
+  font-size: 12px;
+  color: #666;
+  white-space: nowrap;
 }
 
 /* 加载中 */
@@ -419,19 +477,16 @@ export default defineComponent({
 .gv-item {
   display: flex;
   align-items: center;
-  padding: 12px;
-  cursor: default;
+  padding: 0 12px;
   transition: background-color 0.15s;
   gap: 10px;
   border-bottom: 1px solid #f9f9f9;
+  cursor: pointer;
+  height: 65px;
 }
 
 .gv-item:hover {
   background-color: #F5F5F5;
-}
-
-.gv-item--folder {
-  cursor: pointer;
 }
 
 .gv-item-icon {
@@ -450,10 +505,7 @@ export default defineComponent({
 .gv-item-name {
   font-size: 14px;
   color: #333;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  line-height: 1.4;
+  height: 20px !important;
 }
 
 .gv-item-meta {
@@ -471,7 +523,7 @@ export default defineComponent({
   flex-direction: column;
   display: flex;
   align-items: flex-start;
-  line-height: 16px;
+  line-height: 120%;
   margin: 0;
 }
 
@@ -487,6 +539,16 @@ export default defineComponent({
   align-items: flex-end;
   flex-direction: column;
 }
+
+@media (max-width: 480px) {
+  .gv-list {
+    margin: 0;
+  }
+
+  .gv-item-meta-text {
+    font-size: 10px;
+  }
+}
 </style>
 
 <style module>
@@ -497,5 +559,14 @@ export default defineComponent({
   max-width: calc(100% - 20px);
   max-height: calc(100% - 20px);
   background-color: #FAFAFA;
+}
+
+@media (max-width: 480px) {
+  .group-files-viewer-container {
+    max-width: 100%;
+    max-height: 100%;
+    height: 100%;
+    border-radius: 0;
+  }
 }
 </style>
