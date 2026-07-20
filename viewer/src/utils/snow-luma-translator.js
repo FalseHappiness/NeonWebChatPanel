@@ -140,6 +140,30 @@ const convertEssenceMsgListSL = list => {
   return newList
 }
 
+function convertGroupAlbum(input) {
+  return {
+    album_id: input.id,
+    owner: input.owner,
+    name: input.name,
+    desc: input.desc,
+    create_time: String(input.createTime),
+    modify_time: "0",
+    last_upload_time: "0",
+    upload_number: String(input.picNum),
+    cover: {
+      type: 0,
+      image: {
+        photo_url: [],
+        default_url: { url: "", width: 0, height: 0 },
+      },
+    },
+    creator: {
+      nick: input.createnickname,
+      uin: input.createuin,
+    },
+  };
+}
+
 const convertGroupAlbumListSL = data => {
   const newData = []
   for (const item of data) {
