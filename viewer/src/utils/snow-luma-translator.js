@@ -3,7 +3,7 @@ import { getStreamFileDataUrl } from "./backend-api.js";
 
 const convertNoticeSL = event => {
   event = parseJSON(event);
-  if (event.post_type === 'notice') {
+  if (event?.post_type === 'notice') {
     const notice = { ...event }
     if (notice.notice_type === 'notify') {
       if (notice.sub_type === 'poke') {
@@ -28,16 +28,32 @@ const convertNoticeSL = event => {
 
 const convertMessageSL = event => {
   event = parseJSON(event);
-  if (["message", "message_sent"].includes(event.post_type)) {
-    const message = { ...event }
+  if (["message", "message_sent"].includes(event?.post_type)) {
+    event = { ...event }
     // NapCatQQ: message_seq=message_id, real_seq 为序列号（顺序递增）
     // SnowLuma: message_id 为消息 id, message_seq 相当于 NapCatQQ 的 real_seq
-    if (!message.hasOwnProperty("real_seq")) {
-      if (message.hasOwnProperty("message_seq")) {
-        message.real_seq = message.message_seq
+    if (!event.hasOwnProperty("real_seq")) {
+      if (event.hasOwnProperty("message_seq")) {
+        event.real_seq = event.message_seq
       }
     }
-    return message
+    if (Array.isArray(event.message)) {
+      const contents = []
+      for (const content of event.message) {
+        if (content.type === 'poke') {
+          contents.push({
+            ...content,
+            data: {
+              id: content?.data?.id || content?.data?.type,
+              type: content?.data?.type || content?.data?.id
+            }
+          })
+        } else {
+          contents.push(content)
+        }
+      }
+      event.message = contents
+    }
   }
   return event
 }
@@ -47,6 +63,24 @@ const convertWrappedMsgSL = message => {
     ...message,
     event: stringifyJSON(convertMessageSL(convertNoticeSL(message.event)))
   }
+}
+
+const convertContactsSL = contacts => {
+  if (Array.isArray(contacts)) {
+    contacts = [...contacts]
+    for (const key in contacts) {
+      const contact = contacts[key]
+      let latest_msg = contact.latest_msg
+      if (latest_msg) {
+        latest_msg = stringifyJSON(convertMessageSL(latest_msg))
+      }
+      contacts[key] = {
+        ...contact,
+        latest_msg
+      }
+    }
+  }
+  return contacts
 }
 
 /**
@@ -185,5 +219,6 @@ export {
   convertWrappedMsgSL,
   convertEssenceMsgListSL,
   convertGroupAlbumListSL,
-  convertGroupFilesSL
+  convertGroupFilesSL,
+  convertContactsSL,
 }

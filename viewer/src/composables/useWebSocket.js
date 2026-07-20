@@ -12,6 +12,8 @@ export function useWebSocket(url, { onMessage, onNewContact, onNotice }) {
   const reconnectInterval = 3000 // 重连间隔
   const isConnected = ref(false)
   const shouldSync = ref(false) // 是否需要同步消息
+  let reconnectTimer = null // 重连定时器
+  let isClosed = false;
 
   // 存储正在等待响应的 send_action 回调
   const pendingActions = new Map()
@@ -259,11 +261,62 @@ export function useWebSocket(url, { onMessage, onNewContact, onNotice }) {
     }
   }
 
+  // 清理所有pending请求
+  const clearAllPending = () => {
+    for (const [echo, { reject, cleanup }] of pendingActions) {
+      cleanup && cleanup()
+      reject(new Error('WebSocket disconnected'))
+    }
+    pendingActions.clear()
+
+    for (const [echo, { reject, cleanup }] of pendingBackendRequests) {
+      cleanup && cleanup()
+      reject(new Error('WebSocket disconnected'))
+    }
+    pendingBackendRequests.clear()
+  }
+
+  // 彻底关闭WebSocket连接，不再重连
+  const disconnect = () => {
+    // 清除重连定时器
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer)
+      reconnectTimer = null
+    }
+
+    isClosed = true;
+
+    // 重置重连次数，防止自动重连
+    reconnectAttempts.value = maxReconnectAttempts
+
+    // 清理所有待处理的请求
+    clearAllPending()
+
+    // 关闭WebSocket连接（code 1000 表示正常关闭，不会触发重连）
+    if (socket.value) {
+      socket.value.close(1000, 'Client disconnect')
+      socket.value = null
+    }
+
+    // 重置连接状态
+    isConnected.value = false
+    shouldSync.value = false
+  }
+
   // 连接WebSocket
   const connect = () => {
+    // 清除之前的重连定时器
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer)
+      reconnectTimer = null
+    }
+
     socket.value = new WebSocket(url)
 
     socket.value.onopen = () => {
+      if (isClosed) {
+        return
+      }
       isConnected.value = true
       reconnectAttempts.value = 0
       console.log('WebSocket connected')
@@ -278,6 +331,9 @@ export function useWebSocket(url, { onMessage, onNewContact, onNotice }) {
     }
 
     socket.value.onmessage = (event) => {
+      if (isClosed) {
+        return
+      }
       onReceiveMessage(JSON.parse(event.data), true)
     }
 
@@ -293,25 +349,14 @@ export function useWebSocket(url, { onMessage, onNewContact, onNotice }) {
       shouldSync.value = true
 
       // 拒绝所有 pending 的 action
-      for (const [echo, { reject, cleanup }] of pendingActions) {
-        cleanup && cleanup()
-        reject(new Error('WebSocket disconnected'))
-      }
-      pendingActions.clear()
-
-      // 拒绝所有 pending 的 req_backend 请求
-      for (const [echo, { reject, cleanup }] of pendingBackendRequests) {
-        cleanup && cleanup()
-        reject(new Error('WebSocket disconnected'))
-      }
-      pendingBackendRequests.clear()
+      clearAllPending()
 
       // 无限重连
       if (reconnectAttempts.value < maxReconnectAttempts) {
         reconnectAttempts.value++
         const delay = Math.min(reconnectInterval * reconnectAttempts.value, 30000) // 最大30秒间隔
         console.log(`Reconnecting in ${delay / 1000} seconds...`)
-        setTimeout(connect, delay)
+        reconnectTimer = setTimeout(connect, delay)
       }
     }
 
@@ -326,9 +371,7 @@ export function useWebSocket(url, { onMessage, onNewContact, onNotice }) {
 
   // 组件卸载时关闭连接
   onUnmounted(() => {
-    if (socket.value) {
-      socket.value.close()
-    }
+    disconnect()
   })
 
   // 暴露给组件的API
@@ -338,6 +381,7 @@ export function useWebSocket(url, { onMessage, onNewContact, onNotice }) {
     lastMessageId,
     syncMessages,
     sendAction,
-    reqBackend
+    reqBackend,
+    disconnect // 新增：彻底关闭连接的方法
   }
 }

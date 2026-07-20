@@ -7,6 +7,7 @@ import { createSHA256 } from 'hash-wasm';
 import { nanoid } from 'nanoid';
 import { CalledEmitter } from "../composables/event-bus.js";
 import {
+  convertContactsSL,
   convertEssenceMsgListSL,
   convertGroupAlbumListSL,
   convertGroupFilesSL,
@@ -846,7 +847,7 @@ const setGroupUserNameCache = (group_id, user_id, name) => {
 }
 
 const fetchContacts = async () => {
-  return await fetchBackendData("contacts")
+  return convertContactsSL(await fetchBackendData("contacts"))
 }
 
 const getMultimediaProxyUrl = (url) => {

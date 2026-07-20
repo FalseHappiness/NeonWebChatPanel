@@ -26,6 +26,7 @@ import LottieDot from "../components/utils/LottieDot.vue";
 import { formatTimeOptions, parseJSON } from "./others.js";
 import UnparsedJSON from "../components/MessageTypes/MessageJSON/UnparsedJSON.vue";
 import ActivityMD from "../components/MessageTypes/MessageJSON/ActivityMD.vue";
+import UnparsedMessage from "../components/MessageTypes/UnparsedMessage.vue";
 
 const formatTime = (message) => {
   if (!message?.time) return
@@ -184,15 +185,6 @@ const parseMessagePreview = (message, returnPromise = false, replyMode = false) 
         } else if (item.type === 'image') {
           if (replyMode && index === 0) {
             children.push(
-              // h(
-              //   'img',
-              //   {
-              //     src: item.data.url,
-              //     class: 'message-reply-image',
-              //     alt: "",
-              //     'data-fallback-link': item.data.hasOwnProperty("emoji_id") ? getMultimediaProxyUrl(item.data.url) : getStreamFileDataUrl(item)
-              //   }
-              // ),
               h(LoadingImage, {
                 src: item.data.url,
                 class: 'message-reply-image',
@@ -249,14 +241,18 @@ const parseMessagePreview = (message, returnPromise = false, replyMode = false) 
           }
         } else if (item.type === 'poke') {
           const poke_id = item.data.id
-          children.push(`[${{
+          const poke_name = ({
             1: '戳一戳',
             2: '比心',
             3: '点赞',
             4: '心碎',
             5: '666',
             6: "放大招"
-          }[poke_id]}]`)
+          })[poke_id]
+          children.push(`[${poke_name || '未解析的戳一戳'}]`)
+          if (!poke_name) {
+            console.log("Unparsed poke message segment:", item)
+          }
         }
       }
 
@@ -269,28 +265,16 @@ const parseMessagePreview = (message, returnPromise = false, replyMode = false) 
   }
 };
 
-const parseMessage = (message) => {
+const parseMessage = (wrappedMsg) => {
   try {
-    const event = parseJSON(message.event);
-    if (event.message && Array.isArray(event.message)) {
+    const event = parseJSON(wrappedMsg.event);
+    const message = event.message
+    if (Array.isArray(message)) {
       const children = [];
 
-      if (event.message?.length) {
-        const newMessage = []
-        for (const item of event.message) {
-          if (item.type === 'record') {
-            const data = item.data
-            if (!data.file && !data.url) {
-              continue
-            }
-          }
-          newMessage.push(item)
-        }
-        event.message = newMessage
-      }
-
-      if (event.message.length === 1) {
-        const item = event.message[0];
+      // 单独存在与混排有较大效果差异的消息
+      if (message.length === 1) {
+        const item = message[0];
         if (['dice', 'rps', 'face'].includes(item.type)) {
           const is_face = item.type === 'face'
           const face_id = is_face ? item.data.id : {
@@ -324,39 +308,87 @@ const parseMessage = (message) => {
                 'data-face-id': face_id,
               })
             );
-
-            return children;
           }
-        } else if (item.type === 'record') {
-          children.push(
-            h(AudioMessage, {
-              width: '200px',
-              maxWidth: '100%,',
-              src: getFileDataUrl(item),
-              // src: item.data.url,
-            })
-          );
-
-          return children;
-        } else if (item.type === 'file') {
-          children.push(
-            h(FileMessage, {
-              url: getStreamFileDataUrl(item),
-              name: item.data.file,
-              size: item.data.file_size,
-            })
-          );
-
-          return children;
+        }
+        if (children?.length) {
+          return children
         }
       }
 
-      if (event.message.length) {
-        const item = event.message[0]
+      // 只能单独存在的消息
+      if (message.length) {
+        for (const item of message) {
+          if (item.type === 'record') {
+            children.push(
+              h(AudioMessage, {
+                width: '200px',
+                maxWidth: '100%,',
+                src: getFileDataUrl(item),
+                cursorColor: event.user_id === event.self_id ? 'rgba(255, 255, 255, 0.8)' : 'rgba(204, 235, 255, 0.8)'
+              })
+            );
+          } else if (item.type === 'file') {
+            children.push(
+              h(FileMessage, {
+                url: getStreamFileDataUrl(item),
+                name: item.data.file,
+                size: item.data.file_size,
+              })
+            );
+          } else if (item.type === 'poke') {
+            children.push(
+              h(ShakePokeMessage, {
+                id: item.data.id,
+                type: item.data.type,
+                out: event.self_id === event.user_id
+              })
+            )
+          } else if (item.type === 'forward') {
+            children.push(
+              h(ForwardMessage, {
+                id: item.data.id,
+                content: item.data.content,
+              })
+            )
+          } else if (item.type === 'json') {
+            const data = JSON.parse(item.data.data);
+            const components_map = {
+              "com.tencent.troopsharecard": TroopShareCard,
+              "com.tencent.miniapp_01": MiniAPP01,
+              "com.tencent.mannounce": Mannounce,
+              "com.tencent.multimsg": MultiMsg,
+              "com.tencent.feed.lua": FeedLua,
+              "com.tencent.contact.lua": ContactLua,
+              "com.tencent.activity.md": ActivityMD
+            }
+            const view_components_map = {
+              "news": ViewNews
+            }
+            const component = view_components_map[data?.view] || components_map[data.app] || UnparsedJSON;
+            if (component) {
+              children.push(
+                h(component, {
+                  json: data
+                })
+              )
+            }
+          }
+          if (children?.length) {
+            break
+          }
+        }
+        if (children?.length) {
+          return children
+        }
+      }
+
+      // 其它只在第一个元素的消息
+      if (message.length) {
+        const item = message[0]
         if (item.type === 'markdown') {
           children.push(
             h(MarkdownMessage, {
-              content: event.message[0].data.content,
+              content: message[0].data.content,
               class: 'message-markdown-box',
             })
           );
@@ -367,14 +399,15 @@ const parseMessage = (message) => {
             h('div', [
               h(ReplyMessage, {
                 id: item.data.id,
-                out: message.self_id === message.user_id
+                out: event.self_id === event.user_id
               })
             ])
           )
         }
       }
 
-      for (const item of event.message) {
+      // 混排消息
+      for (const item of message) {
         if (item.type === 'text') {
           children.push(...convertMessageTextHTMLSyntax(item.data.text));
         } else if (['dice', 'rps', 'face'].includes(item.type)) {
@@ -398,7 +431,6 @@ const parseMessage = (message) => {
               alt: '',
               src: path,
               class: 'message-emoji-png',
-              // loading: "lazy"
             })
           );
         } else if (item.type === 'at') {
@@ -428,22 +460,12 @@ const parseMessage = (message) => {
         } else if (item.type === 'image') {
           let image_src = item.data.url
           children.push(
-            // h('img', {
-            //   src: image_src,
-            //   alt: "",
-            //   class:
-            //     'message-image' +
-            //     ((event.message.length === 1) ? " message-box-less" : "") +
-            //     (item.data.hasOwnProperty("emoji_id") || item.data.summary === '[动画表情]' ? " message-emoji-picture" : ""),
-            //   // loading: "lazy",
-            //   'data-fallback-link': item.data.hasOwnProperty("emoji_id") ? getMultimediaProxyUrl(item.data.url) : getStreamFileDataUrl(item)
-            // }),
             h(LoadingImage, {
               src: image_src,
               alt: "",
               class:
                 'message-image' +
-                ((event.message.length === 1) ? " message-box-less" : "") +
+                ((message.length === 1) ? " message-box-less" : "") +
                 (item.data.hasOwnProperty("emoji_id") || item.data.summary === '[动画表情]' ? " message-emoji-picture" : ""),
               fallbackSrc: item.data.hasOwnProperty("emoji_id") ? getMultimediaProxyUrl(item.data.url) : getStreamFileDataUrl(item),
               decideMaxWidth: '.message-container'
@@ -451,69 +473,26 @@ const parseMessage = (message) => {
           );
         } else if (item.type === 'video') {
           children.push(
-            // h("video", {
-            //   src: item.data.url,
-            //   class: 'message-video' + ((event.message.length === 1) ? " message-box-less" : ""),
-            //   controls: true,
-            //   'data-fallback-link': getStreamFileDataUrl(item)
-            // }),
             h(LoadingImage, {
               src: item.data.url,
-              class: 'message-video' + ((event.message.length === 1) ? " message-box-less" : ""),
+              class: 'message-video' + ((message.length === 1) ? " message-box-less" : ""),
               controls: true,
               fallbackSrc: getStreamFileDataUrl(item),
               videoMode: true,
               decideMaxWidth: '.message-container'
             })
           );
-        } else if (item.type === 'json') {
-          const data = JSON.parse(item.data.data);
-          const components_map = {
-            "com.tencent.troopsharecard": TroopShareCard,
-            "com.tencent.miniapp_01": MiniAPP01,
-            "com.tencent.mannounce": Mannounce,
-            "com.tencent.multimsg": MultiMsg,
-            "com.tencent.feed.lua": FeedLua,
-            "com.tencent.contact.lua": ContactLua,
-            "com.tencent.activity.md": ActivityMD
-          }
-          const view_components_map = {
-            "news": ViewNews
-          }
-          const component = view_components_map[data?.view] || components_map[data.app] || UnparsedJSON;
-          if (component) {
-            children.push(
-              h(component, {
-                json: data
-              })
-            )
-          }
-        } else if (item.type === 'forward') {
-          children.push(
-            h(ForwardMessage, {
-              id: item.data.id,
-              content: item.data.content,
-            })
-          )
-        } else if (item.type === 'poke') {
-          children.push(
-            h(ShakePokeMessage, {
-              id: item.data.id,
-              type: item.data.type,
-              out: message.self_id === message.user_id
-            })
-          )
         }
       }
 
       // console.log(children)
 
-      return children.length ? children : [''];
+      return children.length ? children : [h(UnparsedMessage, { event })];
     }
     return [event.raw_message || ''];
   } catch (e) {
     console.error("Load message error", e);
-    return [message.event || ''];
+    return [wrappedMsg.event || ''];
   }
 };
 

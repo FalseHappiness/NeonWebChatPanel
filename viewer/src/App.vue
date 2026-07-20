@@ -29,7 +29,8 @@ const {
   syncMessages,
   socket,
   sendAction,
-  reqBackend
+  reqBackend,
+  disconnect: disconnectWebsocket
 } = useWebSocket(wsUri, {
   onMessage: (message) => {
     // 检查消息是否属于当前活跃的联系人
@@ -363,7 +364,7 @@ onMounted(() => {
 
 const destroy = () => {
   destroyContextMenu()
-  socket.value?.close()
+  disconnectWebsocket()
   CalledEmitter.off('sendAction')
   CalledEmitter.off('reqBackend')
 }

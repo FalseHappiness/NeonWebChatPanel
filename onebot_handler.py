@@ -203,7 +203,7 @@ class OneBotHandler:
 
         for msg in messages:
             if 'post_type' not in msg:
-                msg['post_type'] = "message_sent" if msg.get("target_id", msg['user_id']) == int(self_id) else "message"
+                msg['post_type'] = "message_sent" if msg.get("user_id") == int(self_id) else "message"
             if 'self_id' not in msg:
                 msg['self_id'] = int(self_id)
 
