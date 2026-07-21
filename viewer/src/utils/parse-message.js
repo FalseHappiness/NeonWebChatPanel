@@ -39,7 +39,10 @@ const formatTime = (message) => {
 function convertMessageTextHTMLSyntax(text, emoji = false) {
   if (!text) return [];
 
-  return text.split(/([\n ])/).map((part) => {
+  // 统一所有换行格式为 \n，避免 \r\n 产生双重 br
+  const normalized = text.replace(/\r\n|\r/g, '\n');
+
+  return normalized.split(/([\n ])/).map((part) => {
     if (part === '\n') return h('br');
     if (part === ' ') return h('span', { innerHTML: '&nbsp;' });
     return emoji ? convertEmojiToImages(part) : part;
