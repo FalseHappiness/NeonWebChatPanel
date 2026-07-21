@@ -50,9 +50,8 @@ def convert_event_to_message_data(event):
 
     if post_type in ['message', 'message_sent']:
         if message_type == 'group':
-            if post_type == 'message_sent':
-                target_id = target_id or group_id
-        elif message_type == 'private':
+            target_id = target_id or group_id
+        if post_type == 'message' and message_type == 'private':
             target_id = target_id or user_id
 
     # 构造标准化的消息数据
