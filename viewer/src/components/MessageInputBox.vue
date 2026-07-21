@@ -24,10 +24,12 @@ import { nanoid } from "nanoid";
 import CustomScrollBar from "./utils/CustomScrollBar.vue";
 import { showErrorToast, showWarningToast } from "../utils/toast.js";
 import { Icon } from "@iconify/vue";
+import GroupAiRecordEditor from "./utils/GroupAiRecordEditor.vue";
 
 export default defineComponent({
   name: "MessageInputBox",
   components: {
+    GroupAiRecordEditor,
     CustomScrollBar,
     ContactsPicker,
     FilesConfirm,
@@ -87,6 +89,7 @@ export default defineComponent({
       isDropRecordFiles: false,
       isRecordLocked: false,   // 录音锁定状态
       isRecordPaused: false,   // 录音暂停状态
+      showGroupAiRecordEditor: false,  // AI语音编辑器显示状态
     }
   },
   mounted() {
@@ -1845,6 +1848,20 @@ export default defineComponent({
     },
 
     /**
+     * 打开AI语音录制编辑器
+     */
+    handleOpenGroupAiRecordEditor() {
+      if (!this.isGroup) return
+      this.showGroupAiRecordEditor = true
+    },
+    /**
+     * 关闭AI语音录制编辑器
+     */
+    handleCloseGroupAiRecordEditor() {
+      this.showGroupAiRecordEditor = false
+    },
+
+    /**
      * 打开录音面板（始终切换，不阻塞权限获取）
      * 仍然请求权限，但即使没有权限也切换到面板（方便拖放音频文件到面板上）
      */
@@ -2415,6 +2432,11 @@ export default defineComponent({
         </div>
       </template>
     </Tooltip>
+    <GroupAiRecordEditor
+      v-if="showGroupAiRecordEditor && isGroup"
+      :group_id="activeContact?.contact_id"
+      :onClose="handleCloseGroupAiRecordEditor"
+    />
     <vue-resizable
       class="message-input-resizeable"
       :active="['t']"
@@ -2600,6 +2622,18 @@ export default defineComponent({
                   src="/QQ/icons/folder_24.svg"
                   class="message-input-ctrl-icon"
                   @click="handleMessageInputSelectAudios"
+                ></color-svg>
+              </template>
+            </Tooltip>
+            <Tooltip
+              content="AI 语音"
+              use-target-slot
+            >
+              <template #target>
+                <color-svg
+                  src="/QQ/icons/ai_label_16.svg"
+                  class="message-input-ctrl-icon"
+                  @click="handleOpenGroupAiRecordEditor"
                 ></color-svg>
               </template>
             </Tooltip>

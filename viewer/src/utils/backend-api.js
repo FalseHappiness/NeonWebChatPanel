@@ -542,22 +542,6 @@ const fetchGroupFileUrl = async (group_id, file_id) => {
   return (await fetchActionData("get_group_file_url", { group_id, file_id }))?.url
 }
 
-/**
- * 将 QQ 的 [em]e数字[/em] 格式还原为真实 Unicode 表情
- * @param {string} text - 包含 [em] 标签的原始字符串
- * @returns {string} 还原后的字符串
- */
-function decodeQQEmoji(text) {
-  if (typeof text !== 'string') return text;
-
-  return text.replace(/\[em]e(\d+)\[\/em]/g, (match, num) => {
-    const codePoint = parseInt(num, 10) - 200000; // 核心算法
-    // 用 String.fromCodePoint 将 Unicode 码点转成字符
-    return String.fromCodePoint(codePoint);
-  });
-}
-
-
 const fetchGroupAlbumList = async (group_id, attach_info) => {
   const snowLumaEndpoint = "get_group_album_list"
   const params = { group_id, attach_info }
@@ -570,6 +554,15 @@ const fetchGroupAlbumList = async (group_id, attach_info) => {
     }
     return ncData;
   }
+}
+
+
+const fetchAiRecordCharacters = async (group_id) => {
+  return await fetchActionData("get_ai_characters", { group_id })
+}
+
+const fetchSendGroupAiRecord = async (group_id, character, text) => {
+  return await fetchAction("send_group_ai_record", { group_id, character, text })
 }
 
 const isObject = (variable) => {
@@ -945,4 +938,6 @@ export {
   fetchGroupFileSysInfo,
   fetchGroupFileUrl,
   getGroupFileProxyUrl,
+  fetchAiRecordCharacters,
+  fetchSendGroupAiRecord,
 }
