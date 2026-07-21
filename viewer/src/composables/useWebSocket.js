@@ -3,6 +3,7 @@ import { nanoid } from "nanoid";
 import { fetchAPIVersionInfo, fetchSyncMessages } from "../utils/backend-api.js";
 import { convertWrappedMsgSL } from "../utils/snow-luma-translator.js";
 import { useGlobalStore } from "../store/global.js";
+import { isSupportedNoticeMessage } from "../utils/parse-message.js";
 
 export function useWebSocket(url, { onMessage, onNewContact, onNotice }) {
   const socket = ref(null)
@@ -237,13 +238,7 @@ export function useWebSocket(url, { onMessage, onNewContact, onNotice }) {
 
     onNotice(notice)
 
-    if (
-      notice.sub_type === 'poke' ||
-      (notice.notice_type === 'essence' && notice.sub_type === 'add') ||
-      (notice.notice_type === 'group_ban' && ['ban', 'lift_ban'].includes(notice.sub_type)) ||
-      (notice.notice_type === 'group_increase' && ['approve', 'invite'].includes(notice.sub_type)) ||
-      (notice.notice_type === 'group_decrease' && notice.sub_type === 'kick_me')
-    ) {
+    if (isSupportedNoticeMessage(notice)) {
       const type = notice.group_id ? "group" : "private"
       const contact_id = notice.group_id || notice.user_id
 
@@ -362,7 +357,7 @@ export function useWebSocket(url, { onMessage, onNewContact, onNotice }) {
 
     socket.value.onerror = (error) => {
       console.error('WebSocket error:', error)
-      socket.value.close()
+      socket.value?.close()
     }
   }
 

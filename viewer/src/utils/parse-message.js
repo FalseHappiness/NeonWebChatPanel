@@ -1,6 +1,6 @@
 import { h } from "vue";
 import {
-  fetchDisplayName,
+  fetchDisplayName, fetchMsg,
   getCacheName,
   getFileDataUrl,
   getMultimediaProxyUrl,
@@ -58,11 +58,23 @@ function convertEmojiToImages(text, emojiids) {
     .filter(part => part.length > 0)
     .map(part => emojiids.includes(part) ? h('img', {
       alt: '',
-      src: `/QQ/EmojiSystermResource/${encodeURIComponent(part)}/png/${encodeURIComponent(part)}.png`,
+      src: getEmojiPublicPath(part, 'png'),
       class: 'msg-preview-emoji',
       'data-emoji-id': part
     }) : part);
 }
+
+const getEmojiPublicPath = (emoji_id, type, emoji_id_suffix = '', suffix = undefined) => {
+  if (!suffix) {
+    suffix = ({ 'png': '.png', 'apng': '.png', 'lottie': '.json' })[type]
+  }
+  return `/QQ/EmojiSystermResource/${encodeURIComponent(emoji_id)}/${type}/${encodeURIComponent(emoji_id)}${emoji_id_suffix}${suffix}`
+}
+
+const getEmojiPngPath = emoji_id => getEmojiPublicPath(emoji_id, 'png')
+const getEmojiApngPath = emoji_id => getEmojiPublicPath(emoji_id, 'apng')
+
+const getEmojiLottiePath = (emoji_id, suffix) => getEmojiPublicPath(emoji_id, 'lottie', suffix)
 
 const messagePreviewDirectConversionTypes = {
   "record": "语音",
@@ -104,6 +116,32 @@ const createDisplayNameSpan = (is_group, group_id, user_id, promises) => {
     promises.push(promise)
   }
 
+  return vnode
+}
+
+const createNameSpanByMessageId = (message_id, promises) => {
+  let name;
+  const vnode = h("span", {
+    async onVnodeMounted(vnode) {
+      await promise
+      if (vnode?.el && name) {
+        vnode.el.textContent = name;
+      }
+    },
+    innerText: '未知用户'
+  })
+  const promise = (async () => {
+    const msg = parseJSON((await fetchMsg(message_id))?.event);
+    if (msg) {
+      const sender = msg?.sender
+      name = msg.user_id === msg.self_id ? '你' : sender?.card || sender?.nickname;
+    } else {
+      name = '未知'
+    }
+  })()
+  if (Array.isArray(promises)) {
+    promises.push(promise)
+  }
   return vnode
 }
 
@@ -177,7 +215,7 @@ const parseMessagePreview = (message, returnPromise = false, replyMode = false) 
           children.push(
             h('img', {
               alt: '',
-              src: `/QQ/EmojiSystermResource/${encodeURIComponent(face_id)}/png/${encodeURIComponent(face_id)}.png`,
+              src: getEmojiPngPath(face_id),
               class: 'msg-preview-emoji',
               'data-emoji-id': face_id
             })
@@ -292,10 +330,7 @@ const parseMessage = (wrappedMsg) => {
           }
 
           const emojiFiles = useGlobalStore().emojiFiles;
-          const lottiePath =
-            `/QQ/EmojiSystermResource/${encodeURIComponent(face_id)}/lottie/${encodeURIComponent(
-              face_id + (resultId ? `_${resultId}` : '')
-            )}.json`;
+          const lottiePath = getEmojiLottiePath(face_id, resultId ? `_${resultId}` : '');
 
           if (emojiFiles.includes(lottiePath)) {
             // 加载 Lottie
@@ -416,9 +451,8 @@ const parseMessage = (wrappedMsg) => {
             'rps': 359
           }[item.type]
 
-          const emojiBasePath = `/QQ/EmojiSystermResource/${encodeURIComponent(face_id)}`;
-          const apngPath = `${emojiBasePath}/apng/${encodeURIComponent(face_id)}.png`;
-          const pngPath = `${emojiBasePath}/png/${encodeURIComponent(face_id)}.png`;
+          const apngPath = getEmojiApngPath(face_id);
+          const pngPath = getEmojiPngPath(face_id);
 
           const emojiFiles = useGlobalStore().emojiFiles;
 
@@ -534,7 +568,7 @@ const parseNoticePreview = (notice, returnPromise = false) => {
           1: poke_sender,
           2: poke_target
         }
-        raw_info.forEach(item => {
+        for (const item of raw_info) {
           if (item.type === 'qq') {
             qq_user_count++
             const uin = qq_user[qq_user_count]
@@ -561,7 +595,7 @@ const parseNoticePreview = (notice, returnPromise = false) => {
               })
             )
           }
-        })
+        }
       }
     } else if (event.notice_type === 'essence' && event.sub_type === 'add') {
       const essence_user = event.user_id
@@ -632,6 +666,26 @@ const parseNoticePreview = (notice, returnPromise = false) => {
       )
     } else if (event.notice_type === 'group_decrease' && event.sub_type === 'kick_me') {
       children.push('你已被移出群聊')
+    } else if (event.notice_type === 'group_msg_emoji_like') {
+      const face_id = event?.likes?.[0]?.emoji_id
+      children.push(
+        event.operator_id === event.self_id ? '你' : createDisplayNameSpan(
+          true,
+          event.group_id,
+          event.operator_id,
+          promises,
+        ),
+        event.sub_type === 'add' ? '回应了' : "取消回应了",
+        createNameSpanByMessageId(event.message_id, promises),
+        '的消息',
+        ': ',
+        h('img', {
+          alt: '',
+          src: getEmojiPngPath(face_id),
+          class: 'msg-preview-emoji',
+          'data-emoji-id': face_id
+        })
+      )
     }
   } catch (e) {
     console.error("Notice preview parse error:", e)
@@ -801,6 +855,33 @@ const parseNotice = notice => {
       )
     } else if (event.notice_type === 'group_decrease' && event.sub_type === 'kick_me') {
       children.push('你已被移出群聊')
+    } else if (event.notice_type === 'group_msg_emoji_like') {
+      const face_id = event?.likes?.[0]?.emoji_id
+      children.push(
+        event.operator_id === event.self_id ? '你' : createNoticeExecuteCommand('span', [
+          createDisplayNameSpan(
+            true,
+            event.group_id,
+            event.operator_id,
+          ),
+        ], 'view-user-info-' + event.operator_id),
+        event.sub_type === 'add' ? '回应了' : "取消回应了",
+        createNoticeExecuteCommand(
+          "span",
+          [
+            createNameSpanByMessageId(event.message_id),
+            '的消息'
+          ],
+          "jump-to-msg-" + event.message_id
+        ),
+        ': ',
+        h('img', {
+          alt: '',
+          src: getEmojiPngPath(face_id),
+          class: 'msg-preview-emoji',
+          'data-emoji-id': face_id
+        })
+      )
     }
   } catch (e) {
     console.error("Notice parse error:", e)
@@ -810,6 +891,17 @@ const parseNotice = notice => {
   return children
 }
 
+const isSupportedNoticeMessage = notice => {
+  return (
+    notice.sub_type === 'poke' ||
+    (notice.notice_type === 'essence' && notice.sub_type === 'add') ||
+    (notice.notice_type === 'group_ban' && ['ban', 'lift_ban'].includes(notice.sub_type)) ||
+    (notice.notice_type === 'group_increase' && ['approve', 'invite'].includes(notice.sub_type)) ||
+    (notice.notice_type === 'group_decrease' && notice.sub_type === 'kick_me') ||
+    (notice.notice_type === 'group_msg_emoji_like' && ['add', 'remove'].includes(notice.sub_type))
+  )
+}
+
 export {
   parseMessagePreview,
   formatTime,
@@ -817,4 +909,5 @@ export {
   convertMessageTextHTMLSyntax,
   parseNoticePreview,
   parseNotice,
+  isSupportedNoticeMessage,
 }

@@ -15,6 +15,7 @@ import { destroyContextMenu, initContextMenu } from "./utils/context-menu.js";
 import "./App.css"
 import { CalledEmitter } from "./composables/event-bus.js";
 import ContactInfoTooltip from "./components/utils/ContactInfoTooltip.vue";
+import { isSupportedNoticeMessage } from "./utils/parse-message.js";
 
 const contacts = ref([])
 const loadingContacts = ref(false)
@@ -75,13 +76,7 @@ const {
           })
         }
       }
-    } else if (
-      notice.sub_type === 'poke' ||
-      (notice.notice_type === 'essence' && notice.sub_type === 'add') ||
-      (notice.notice_type === 'group_ban' && ['ban', 'lift_ban'].includes(notice.sub_type)) ||
-      (notice.notice_type === 'group_increase' && ['approve', 'invite'].includes(notice.sub_type)) ||
-      (notice.notice_type === 'group_decrease' && notice.sub_type === 'kick_me')
-    ) {
+    } else if (isSupportedNoticeMessage(notice)) {
       const is_group = !!notice.group_id
       const isCurrentContact = activeContact.value && (
         (
