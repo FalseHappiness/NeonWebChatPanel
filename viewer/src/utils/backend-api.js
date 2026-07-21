@@ -32,7 +32,7 @@ const fetchOptionsAction = async ({ endpoint, data, signal, timeout }) => {
     if (signal instanceof AbortController) {
       signal = signal.signal
     }
-    return await CalledEmitter.emit("sendAction", endpoint, data, signal, timeout)
+    return await CalledEmitter.emit(["sendAction", timeout], endpoint, data, signal, timeout)
   } catch (e) {
     showToast("error", `Fetch action ${endpoint} error`);
     console.error(`Fetch action ${endpoint} error`, e);
@@ -64,7 +64,7 @@ const fetchBackend = async (endpoint, params = {}, signal) => {
     if (signal instanceof AbortController) {
       signal = signal.signal
     }
-    return await CalledEmitter.emit("reqBackend", endpoint, params, signal)
+    return await CalledEmitter.emit(["reqBackend", 10 * 60 * 1000], endpoint, params, signal)
   } catch (e) {
     showToast("error", `Fetch backend ${endpoint} error`);
     console.error(`Fetch backend ${endpoint} error`, e);
@@ -242,7 +242,7 @@ const fetchSendMessageOptions = async ({ contact, message, signal, timeout = und
   // 拼接接口 endpoint
   const endpoint = isGroup ? "send_group_msg" : "send_private_msg";
 
-  return await fetchAction(endpoint, reqData, signal);
+  return await fetchAction(endpoint, reqData, signal, timeout);
 }
 
 

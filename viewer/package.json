@@ -41,6 +41,7 @@
     "xgplayer": "^3.0.26"
   },
   "devDependencies": {
+    "@iconify/vue": "^5.0.1",
     "@vitejs/plugin-vue": "^6.0.8",
     "npm-check-updates": "^22.2.9",
     "sass-embedded": "^1.100.0",

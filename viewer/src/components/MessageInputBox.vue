@@ -22,13 +22,12 @@ import ContactsPicker from "./utils/ContactsPicker.vue";
 import { Emitter } from "../composables/event-bus.js";
 import { nanoid } from "nanoid";
 import CustomScrollBar from "./utils/CustomScrollBar.vue";
-import RecordMicrophoneIcon from "./utils/RecordMicrophoneIcon.vue";
 import { showErrorToast, showWarningToast } from "../utils/toast.js";
+import { Icon } from "@iconify/vue";
 
 export default defineComponent({
   name: "MessageInputBox",
   components: {
-    RecordMicrophoneIcon,
     CustomScrollBar,
     ContactsPicker,
     FilesConfirm,
@@ -39,6 +38,7 @@ export default defineComponent({
     ColorSvg,
     VueResizable,
     SimpleBar,
+    Icon,
   },
   props: {
     activeContact: {
@@ -84,7 +84,9 @@ export default defineComponent({
       recordShouldCancel: false,
       recordStream: null,
       isHoveringCancel: false,
-      isDropRecordFiles: false
+      isDropRecordFiles: false,
+      isRecordLocked: false,   // 录音锁定状态
+      isRecordPaused: false,   // 录音暂停状态
     }
   },
   mounted() {
@@ -1186,45 +1188,6 @@ export default defineComponent({
       }
     },
 
-    async handleMessageInputSelectImages() {
-      try {
-        // 检查浏览器是否支持 File System Access API
-        if (!('showOpenFilePicker' in window)) {
-          alert('您的浏览器不支持 File System Access API，请使用最新版 Chrome/Edge 浏览器');
-          return;
-        }
-
-        // 文件类型选项 - 接受所有图片类型，但不限制仅图片
-        const options = {
-          types: [
-            {
-              description: 'Images',
-              accept: {
-                'image/*': ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.tiff', '.svg']
-              }
-            }
-          ],
-          multiple: true, // 允许多选
-          excludeAcceptAllOption: false // 显示"所有文件"选项
-        };
-
-        // 打开文件选择器
-        const fileHandles = await window.showOpenFilePicker(options);
-
-        // 遍历所有选择的文件
-        for (const fileHandle of fileHandles) {
-          // 获取文件对象
-          const file = await fileHandle.getFile();
-          await this.insertImageAtCursor(file);
-        }
-      } catch (error) {
-        // 用户可能取消了选择，不需要处理
-        if (error.name !== 'AbortError') {
-          console.error('选择文件时出错:', error);
-        }
-      }
-    },
-
     parseFragmentIntoMessage(fragment) {
       const addMessage = (messages, type, data) => {
         const msg = { type, data }
@@ -1752,44 +1715,102 @@ export default defineComponent({
       this.messageContentToForward = this.messageIdToForward = undefined
     },
 
-    async handleMessageInputSelectFiles() {
+    // 公共通用文件选择工具方法
+    /**
+     * 打开系统文件选择器，返回 File 数组
+     * @param {Object} pickerOptions showOpenFilePicker 配置
+     * @returns {Promise<File[]>}
+     */
+    async openFilePicker(pickerOptions) {
+      // 浏览器API兼容校验
+      if (!('showOpenFilePicker' in window)) {
+        alert('您的浏览器不支持 File System Access API，请使用最新版 Chrome/Edge 浏览器');
+        return [];
+      }
+
       try {
-        // 检查浏览器是否支持 File System Access API
-        if (!('showOpenFilePicker' in window)) {
-          alert('您的浏览器不支持 File System Access API，请使用最新版 Chrome/Edge 浏览器');
-          return;
+        const fileHandles = await window.showOpenFilePicker(pickerOptions);
+        // 批量读取 File 对象
+        const fileList = await Promise.all(
+          fileHandles.map(handle => handle.getFile())
+        );
+        // 过滤空大小文件
+        const validFiles = fileList.filter(file => file.size > 0);
+        // 存在空文件时提示
+        if (validFiles.length !== fileList.length) {
+          showToast('info', '已自动过滤空文件/文件夹');
         }
-
-        // 文件类型选项 - 接受所有类型
-        const options = {
-          types: [
-            {
-              description: 'Files',
-            }
-          ],
-          multiple: true, // 允许多选
-          excludeAcceptAllOption: false // 显示"所有文件"选项
-        };
-
-        // 打开文件选择器
-        const fileHandles = await window.showOpenFilePicker(options);
-        const files = []
-
-        for (const fileHandle of fileHandles) {
-          files.push(await fileHandle.getFile())
-        }
-
-        const filteredFiles = files.filter(file => file.size)
-        if (filteredFiles.length !== files.length) {
-          showToast('info', '已自动过滤空文件/文件夹')
-        }
-        this.draggedFiles = filteredFiles
+        return validFiles;
       } catch (error) {
-        // 用户可能取消了选择，不需要处理
+        // 用户取消弹窗不报错
         if (error.name !== 'AbortError') {
           console.error('选择文件时出错:', error);
         }
+        return [];
       }
+    },
+
+    // 选择图片并插入光标位置
+    async handleMessageInputSelectImages() {
+      const pickerOpts = {
+        types: [
+          {
+            description: 'Images',
+            accept: {
+              'image/*': ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.tiff', '.svg']
+            }
+          }
+        ],
+        multiple: true,
+        excludeAcceptAllOption: false
+      };
+
+      const files = await this.openFilePicker(pickerOpts);
+      // 图片单独逻辑：逐个插入编辑器光标
+      for (const file of files) {
+        await this.insertImageAtCursor(file);
+      }
+    },
+
+    // 选择任意普通文件
+    async handleMessageInputSelectFiles() {
+      const pickerOpts = {
+        types: [
+          {
+            description: 'Files',
+          }
+        ],
+        multiple: true,
+        excludeAcceptAllOption: false
+      };
+
+      this.draggedFiles = await this.openFilePicker(pickerOpts);
+    },
+
+    // 新增：选择音频文件
+    async handleMessageInputSelectAudios() {
+      const pickerOpts = {
+        types: [
+          {
+            description: 'Audio 音频文件',
+            accept: {
+              'audio/*': ['.mp3', '.wav', '.ogg', '.flac', '.m4a', '.aac', '.wma']
+            }
+          }
+        ],
+        multiple: true,
+        excludeAcceptAllOption: false
+      };
+
+      const files = await this.openFilePicker(pickerOpts);
+      if (files.length === 0) return;
+
+      const audioFiles = files.filter(file => file.type.startsWith('audio/'))
+      if (audioFiles.length !== files.length) {
+        showToast('info', '已自动过滤非音频文件')
+      }
+      this.isDropRecordFiles = true
+      this.draggedFiles = audioFiles
     },
 
     handleFilesUploadTasksViewer() {
@@ -1839,80 +1860,161 @@ export default defineComponent({
     },
 
     /**
-     * 增加一个录音激活源，只有当所有激活源都释放后录音才会停止
-     * 如果没有已缓存的流，尝试获取权限，获取不到则不能开始录音
+     * 开始录音的底层逻辑（不处理激活计数）
+     */
+    async startRecording() {
+      if (!this.activeContact) return
+      if (this.isRecording) return
+      let stream = this.recordStream
+      if (!stream) {
+        stream = await this.requestRecordPermission()
+        if (!stream) return
+        this.recordStream = stream
+      }
+      this.isRecording = true
+      this.recordShouldCancel = false
+      this.isRecordPaused = false
+      this.audioChunks = []
+      this.recordDuration = 0
+
+      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' })
+      this.mediaRecorder = mediaRecorder
+
+      mediaRecorder.ondataavailable = e => {
+        if (e.data.size > 0) {
+          this.audioChunks.push(e.data)
+        }
+      }
+
+      mediaRecorder.onstop = () => {
+      }
+
+      mediaRecorder.start()
+
+      this.recordTimer = setInterval(() => {
+        this.recordDuration++
+      }, 1000)
+    },
+
+    /**
+     * 增加一个录音激活源
      */
     async incrRecord() {
       if (!this.activeContact) return
-      // 防止重复录音
-      if (this.isRecording) return
+
       this.recordActiveCount++
+
+      if (this.isRecording && !this.isRecordPaused) {
+        // 已录音且非暂停：仅增加计数，保持录音
+        return
+      }
+
+      if (this.isRecordPaused) {
+        // 暂停状态下，恢复录音
+        this.resumeRecord()
+        return
+      }
+
+      // 未录音，开始录音
       if (this.recordActiveCount === 1) {
-        // 首次激活，使用已缓存的流（从面板打开时获取）
-        let stream = this.recordStream
-        // 如果没有流，尝试获取权限
-        if (!stream) {
-          stream = await this.requestRecordPermission()
-        }
-        // 没有权限，不能开始录音
-        if (!stream) {
-          this.recordActiveCount = 0
-          return
-        }
-        // 缓存流，方便后续复用
-        this.recordStream = stream
-        this.isRecording = true
-        this.recordShouldCancel = false
-        this.audioChunks = []
-        this.recordDuration = 0
-
-        const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' })
-        this.mediaRecorder = mediaRecorder
-
-        mediaRecorder.ondataavailable = e => {
-          if (e.data.size > 0) {
-            this.audioChunks.push(e.data)
-          }
-        }
-
-        // 不在此处停止 tracks，保持流复用，面板关闭时统一释放
-        mediaRecorder.onstop = () => {
-        }
-
-        mediaRecorder.start()
-
-        // 启动计时器
-        this.recordTimer = setInterval(() => {
-          this.recordDuration++
-        }, 1000)
+        await this.startRecording()
       }
     },
 
     /**
-     * 减少一个录音激活源，当所有激活源都释放时停止录音并发送
+     * 减少一个录音激活源
      */
-    decrRecord() {
+    decrRecord(event) {
       if (this.recordActiveCount <= 0) return
       this.recordActiveCount--
+
+      // 锁定模式下不因激活源归零而停止录音
+      if (this.isRecordLocked) return
+
+      // 非锁定模式，所有激活源消失，根据状态决定后续操作
       if (this.recordActiveCount === 0) {
-        this.finishRecord()
+        this.evaluateRelease(event)
       }
     },
 
     /**
-     * 所有激活源释放时，处理录音结果
+     * 所有激活源释放后，判断是发送、取消还是其他操作
+     */
+    evaluateRelease(event) {
+      if (this.recordShouldCancel) {
+        this.cancelRecord()
+        return
+      }
+
+      // 如果正处于暂停状态，松手不做任何事
+      if (this.isRecordPaused) return
+
+      if (event) {
+        const target = event.target
+        // 在取消按钮上松开 -> 取消
+        if (this.isHoveringCancel || (target && target.closest('.message-input-record-cancel'))) {
+          this.cancelRecord()
+          return
+        }
+        // 在锁按钮上松开 -> 切换为锁定模式并保持录音
+        if (target && target.closest('.message-input-record-lock')) {
+          this.isRecordLocked = true
+          return
+        }
+        // 在播放/暂停按钮上松开 -> 解锁模式下非暂停则暂停
+        if (target && target.closest('.message-input-record-play-switch')) {
+          if (!this.isRecordPaused) {
+            this.pauseRecord()
+          }
+          return
+        }
+      }
+
+      // 其他情况：发送录音
+      this.finishRecord()
+    },
+
+    /**
+     * 暂停录音
+     */
+    pauseRecord() {
+      if (this.mediaRecorder && this.mediaRecorder.state === 'recording') {
+        this.mediaRecorder.pause()
+        this.isRecordPaused = true
+        if (this.recordTimer) {
+          clearInterval(this.recordTimer)
+          this.recordTimer = null
+        }
+      }
+    },
+
+    /**
+     * 恢复录音
+     */
+    resumeRecord() {
+      if (this.mediaRecorder && this.mediaRecorder.state === 'paused') {
+        this.mediaRecorder.resume()
+        this.isRecordPaused = false
+        if (!this.recordTimer) {
+          this.recordTimer = setInterval(() => {
+            this.recordDuration++
+          }, 1000)
+        }
+      }
+    },
+
+    /**
+     * 完成录音并发送
      */
     async finishRecord() {
       if (!this.isRecording) return
       this.isRecording = false
 
-      // 停止计时器
       if (this.recordTimer) {
         clearInterval(this.recordTimer)
         this.recordTimer = null
       }
 
-      // 停止 MediaRecorder，等待 onstop 事件确保所有 audioChunks 已收集完毕
       if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
         await new Promise(resolve => {
           this.mediaRecorder.onstop = () => {
@@ -1925,22 +2027,21 @@ export default defineComponent({
 
       const duration = this.recordDuration
       this.recordDuration = 0
+      this.isRecordPaused = false
+      this.recordActiveCount = 0
 
-      // 录音时间太短（< 1秒）
       if (duration < 1) {
         showWarningToast('录音时间太短')
         this.audioChunks = []
         return
       }
 
-      // 如果标记为取消，不发送
       if (this.recordShouldCancel) {
         this.audioChunks = []
         this.recordShouldCancel = false
         return
       }
 
-      // 发送录音
       if (this.audioChunks.length > 0) {
         const audioBlob = new Blob(this.audioChunks, { type: 'audio/webm' })
         this.audioChunks = []
@@ -1963,18 +2064,16 @@ export default defineComponent({
     cancelRecord() {
       if (!this.isRecording && this.recordActiveCount <= 0) return
 
-      // 标记为取消，强制停止所有录音状态
       this.recordShouldCancel = true
       this.recordActiveCount = 0
       this.isRecording = false
+      this.isRecordPaused = false
 
-      // 停止计时器
       if (this.recordTimer) {
         clearInterval(this.recordTimer)
         this.recordTimer = null
       }
 
-      // 停止 MediaRecorder
       if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
         this.mediaRecorder.stop()
       }
@@ -1984,19 +2083,29 @@ export default defineComponent({
       this.audioChunks = []
     },
 
-    async handleRecordIconMouseDown() {
+    async handleRecordIconMouseDown(e) {
+      // 只处理麦克风图标的 mousedown，排除锁和播放按钮
+      const target = e.target
+      if (!target.closest('.message-input-record-microphone')) return
+
+      // 锁定且正在录音时，忽略长按（麦克风此时作为发送按钮）
+      if (this.isRecordLocked && this.isRecording) return
       await this.incrRecord()
-      // 在 document 上注册 mouseup 监听，确保鼠标松开时能正确检测取消区域
       document.addEventListener('mouseup', this.handleRecordIconDocMouseUp)
     },
 
     handleRecordIconDocMouseUp(e) {
       document.removeEventListener('mouseup', this.handleRecordIconDocMouseUp)
-      // 检查鼠标松开时是否在取消按钮区域内
-      if (this.isHoveringCancel) {
-        this.recordShouldCancel = true
+      this.decrRecord(e)
+    },
+
+    /**
+     * 发送录音（锁定模式时点击发送图标触发）
+     */
+    handleSendRecord() {
+      if (this.isRecording) {
+        this.finishRecord()
       }
-      this.decrRecord()
     },
 
     handleWindowRecordKeyDown(e) {
@@ -2011,32 +2120,41 @@ export default defineComponent({
 
     async handleRecordPanelKeyDown(e) {
       if (e.key === 'Escape') {
+        e.preventDefault()
         if (this.isRecording) {
-          // 如果在录音，Esc取消录音，不退出面板
-          e.preventDefault()
           this.cancelRecord()
         } else {
-          // 不在录音，Esc退出录音面板
-          e.preventDefault()
           this.isShowRecordPanel = false
         }
         return
       }
 
-      // 空格键按下 - 增加激活源
+      // 空格键按下
       if (e.key === ' ' || e.code === 'Space') {
         if (!e.repeat) {
           e.preventDefault()
-          await this.incrRecord()
+          if (this.isRecording && this.isRecordLocked) {
+            // 锁定模式下，切换暂停/非暂停
+            if (this.isRecordPaused) {
+              this.resumeRecord()
+            } else {
+              this.pauseRecord()
+            }
+          } else {
+            // 非锁定模式：增加激活源（开始录音或恢复录音）
+            await this.incrRecord()
+          }
         }
       }
     },
 
     handleRecordPanelKeyUp(e) {
-      // 空格键松开 - 释放激活源
       if (e.key === ' ' || e.code === 'Space') {
         e.preventDefault()
-        this.decrRecord()
+        // 锁定模式下空格已在 keydown 中处理，keyup 不做任何事
+        if (!(this.isRecording && this.isRecordLocked)) {
+          this.decrRecord()
+        }
       }
     },
 
@@ -2046,9 +2164,69 @@ export default defineComponent({
 
     handleRecordCancelMouseLeave() {
       this.isHoveringCancel = false
-    }
+    },
+
+    handleLockClick() {
+      if (this.isRecording) {
+        if (this.isRecordLocked) {
+          // 锁定 -> 解锁，并暂停
+          this.isRecordLocked = false
+          this.pauseRecord()
+        } else {
+          // 解锁 -> 锁定，保持录音
+          this.isRecordLocked = true
+        }
+      } else {
+        // 未录音，仅切换锁定状态
+        this.isRecordLocked = !this.isRecordLocked
+      }
+    },
+
+    handlePlaySwitchClick() {
+      if (!this.isRecording) {
+        // 未录音：锁定并开始录音
+        this.isRecordLocked = true
+        this.startRecording()
+      } else {
+        // 录音中
+        if (this.isRecordLocked) {
+          // 锁定模式：自由切换暂停/恢复
+          if (this.isRecordPaused) {
+            this.resumeRecord()
+          } else {
+            this.pauseRecord()
+          }
+        } else {
+          // 解锁模式
+          if (this.isRecordPaused) {
+            // 暂停状态：恢复录音并锁定
+            this.resumeRecord()
+            this.isRecordLocked = true
+          } else {
+            // 非暂停：暂停录音
+            this.pauseRecord()
+          }
+        }
+      }
+    },
+
+    handleExitRecordPanel() {
+      if (this.isRecording) {
+        this.cancelRecord()
+      } else {
+        this.isShowRecordPanel = false
+      }
+    },
   },
   computed: {
+    lockIcon() {
+      return this.isRecordLocked ? 'tabler:lock' : 'tabler:lock-open'
+    },
+    playSwitchIcon() {
+      return (this.isRecording && !this.isRecordPaused)
+        ? '/QQ/icons/pause_24.svg'
+        : '/QQ/icons/play_fill_24.svg'
+    },
     emojiGroupList() {
       const category = {
         "互动表情": [114, 358, 359],
@@ -2171,6 +2349,9 @@ export default defineComponent({
           this.recordStream.getTracks().forEach(track => track.stop())
           this.recordStream = null
         }
+        // 重置状态
+        // this.isRecordLocked = false
+        this.isRecordPaused = false
       }
     }
   }
@@ -2375,7 +2556,6 @@ export default defineComponent({
                 <color-svg
                   src="/QQ/icons/files_24.svg"
                   class="message-input-ctrl-icon"
-                  ref="filesUploadControl"
                   @click="handleFilesUploadTasksViewer"
                 ></color-svg>
               </template>
@@ -2408,10 +2588,22 @@ export default defineComponent({
       <div class="message-input-record-panel message-input-panel"
            :class="{ 'display-flex': isShowRecordPanel }"
            tabindex="-1"
-           ref="recordPanel"
-           @keydown="handleRecordPanelKeyDown"
-           @keyup="handleRecordPanelKeyUp">
+           ref="recordPanel">
         <div class="message-input-controls">
+          <div class="message-input-controls-left">
+            <Tooltip
+              content="音频文件"
+              use-target-slot
+            >
+              <template #target>
+                <color-svg
+                  src="/QQ/icons/folder_24.svg"
+                  class="message-input-ctrl-icon"
+                  @click="handleMessageInputSelectAudios"
+                ></color-svg>
+              </template>
+            </Tooltip>
+          </div>
           <div class="message-input-controls-right">
             <Tooltip
               v-if="currentFilesUploadTasks?.filter(task=>task?.type==='record')?.length"
@@ -2422,7 +2614,6 @@ export default defineComponent({
                 <color-svg
                   src="/QQ/icons/files_24.svg"
                   class="message-input-ctrl-icon"
-                  ref="filesUploadControl"
                   @click="handleFilesUploadTasksViewer"
                 ></color-svg>
               </template>
@@ -2430,21 +2621,69 @@ export default defineComponent({
           </div>
         </div>
         <div class="message-input-record-timer">{{ formatRecordTime(recordDuration) }}</div>
-        <div class="message-input-record-microphone-container"
+        <div class="message-input-record-container"
              @mousedown="handleRecordIconMouseDown"
              @mouseleave="isHoveringCancel = false">
-          <RecordMicrophoneIcon :active="isRecording"/>
+          <div class="message-input-record-lock message-input-record-icon-container"
+               @click.stop="handleLockClick">
+            <Icon :icon="lockIcon" class="message-input-record-icon"/>
+          </div>
+          <div class="message-input-record-microphone message-input-record-icon-container"
+               :class="{ active: isRecording && !isRecordPaused }">
+            <template v-if="isRecording && isRecordLocked">
+              <Icon icon="prime:send" class="message-input-record-icon" @click.stop="handleSendRecord"/>
+            </template>
+            <template v-else>
+              <ColorSvg src="/QQ/icons/microphone_on_24.svg" class="message-input-record-icon"></ColorSvg>
+            </template>
+          </div>
+          <div class="message-input-record-play-switch message-input-record-icon-container"
+               @mousedown.stop
+               @click.stop="handlePlaySwitchClick">
+            <ColorSvg
+              :src="playSwitchIcon"
+              :size="92"
+              class="message-input-record-icon"
+              :style="{ marginLeft: playSwitchIcon.endsWith('play_fill_24.svg') ? '2px' : '0' }"
+            />
+          </div>
         </div>
         <div class="text-muted message-input-record-hint">
           <template v-if="isRecording">
-            松手发送，按 Esc 或点击<span @click="cancelRecord"
-                                        @mouseenter="handleRecordCancelMouseEnter"
-                                        @mouseleave="handleRecordCancelMouseLeave"
-                                        class="message-input-record-cancel">取消发送</span>
+            <!-- 录音中 -->
+            <!-- 解锁、非暂停：松手发送 -->
+            <template v-if="!isRecordLocked && !isRecordPaused">
+              松手发送，按 Esc 键或点击
+            </template>
+            <!-- 解锁、暂停 -->
+            <template v-else-if="!isRecordLocked && isRecordPaused">
+              录音已暂停，按下空格键或长按麦克风恢复，按 Esc 键或点击
+            </template>
+            <!-- 锁定、暂停 -->
+            <template v-else-if="isRecordLocked && isRecordPaused">
+              录音已暂停（锁定），点击播放继续，点击锁解锁并保持暂停，按 Esc 键或点击
+            </template>
+            <!-- 锁定、非暂停 -->
+            <template v-else>
+              录音中（锁定），点击发送按钮发送，点击锁解锁并暂停，按 Esc 键或点击
+            </template>
+            <span @click="cancelRecord"
+                  @mouseenter="handleRecordCancelMouseEnter"
+                  @mouseleave="handleRecordCancelMouseLeave"
+                  class="message-input-record-cancel">取消发送</span>
           </template>
           <template v-else>
-            按住空格开始说话，按 Esc 键或点击<span @click="isShowRecordPanel = false"
-                                                  class="message-input-record-exit">退出</span>
+            <!-- 未录音 -->
+            <template v-if="isRecordLocked">
+              已锁定，点击麦克风或空格键开始录音，点击
+            </template>
+            <template v-else>
+              按住空格键开始说话，按 Esc 键或点击
+            </template>
+            <span @click="handleExitRecordPanel"
+                  @mouseenter="handleRecordCancelMouseEnter"
+                  @mouseleave="handleRecordCancelMouseLeave"
+                  class="message-input-record-cancel">退出</span>
           </template>
         </div>
       </div>
@@ -2475,7 +2714,7 @@ export default defineComponent({
   justify-content: space-between;
   align-items: center;
   height: 35px;
-  flex-shrink: 0; /* 防止高度被压缩，可选优化 */
+  flex-shrink: 0;
 }
 
 .message-input-ctrl-icon {
@@ -2522,17 +2761,13 @@ export default defineComponent({
 }
 
 .message-input-editor {
-  /*height: 100%;*/
   flex: 1;
   outline: none;
   line-height: 22px;
-  /*font-size: 16px;*/
   word-wrap: break-word;
   word-break: break-all;
   overflow-wrap: break-word;
-  /*word-break: break-word;*/
   color: black;
-  /*white-space: break-spaces;*/
   white-space: pre-wrap;
 }
 
@@ -2703,7 +2938,6 @@ export default defineComponent({
 .message-input-common-panel {
   align-items: stretch;
   justify-content: flex-start;
-
 }
 
 .message-input-record-panel {
@@ -2722,13 +2956,15 @@ export default defineComponent({
   font-size: 13px;
 }
 
-.message-input-record-microphone-container {
+.message-input-record-container {
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   user-select: none;
   -webkit-user-select: none;
+  gap: 30px;
+  padding: 20px 0;
 }
 
 .message-input-record-exit,
@@ -2741,6 +2977,57 @@ export default defineComponent({
   position: absolute;
   right: 0;
   top: 0;
+  width: 100%;
+}
+
+.message-input-record-icon-container {
+  height: 45px;
+  width: 45px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border-radius: 50%;
+  --inner-color: transparent;
+  --outer-color: transparent;
+  background: radial-gradient(38.02% 38.02% at 50% 50%, var(--inner-color) 0px, var(--outer-color) 100%);
+}
+
+.message-input-record-icon {
+  height: 24px;
+  width: 24px;
+  color: white;
+}
+
+.message-input-record-icon.color-svg {
+  background-color: white;
+}
+
+.message-input-record-lock {
+  --inner-color: rgb(255, 180, 50);
+  --outer-color: rgb(255 134 0);
+}
+
+.message-input-record-play-switch {
+  --inner-color: rgb(130 255 100);
+  --outer-color: rgb(50, 200, 160);
+}
+
+.message-input-record-microphone {
+  height: 52px;
+  width: 52px;
+  outline: rgba(0, 153, 255, 0.2) solid 2px;
+  transition-duration: 0.3s;
+  transition-timing-function: ease;
+  transition-delay: 0s;
+  transition-property: outline-width;
+  --inner-color: rgb(0, 201, 255);
+  --outer-color: rgb(0, 155, 255);
+}
+
+.message-input-record-microphone.active {
+  outline-width: 6px;
+  --inner-color: rgb(0, 177, 255);
+  --outer-color: rgb(0, 128, 255);
 }
 </style>
 

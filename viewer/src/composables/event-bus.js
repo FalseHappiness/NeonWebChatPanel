@@ -36,27 +36,41 @@ class CalledEmitterClass {
 
   /**
    * 发起调用，await 获取返回值
-   * @param {string} type 事件类型
-   * @param  {...any} args 参数
+   * @param {string | {type: string, timeout?: number} | [type: string, timeout?: number]} info
+   * 事件配置信息，支持三种格式：
+   * 1. 字符串：仅代表事件 type
+   * 2. 对象：{ type: 事件名, timeout?: 超时毫秒数 }
+   * 3. 数组：[type, timeout?]
+   * @param  {...any} args 额外透传的事件参数
    * @returns {Promise<any>}
    */
-  emit(type, ...args) {
+  emit(info, ...args) {
+    let type, timeout;
+    if (typeof info === 'object') {
+      ({ type, timeout } = info)
+    }
+    if (Array.isArray(info)) {
+      ([type, timeout] = info)
+    }
+    if (typeof info === 'string') {
+      type = info
+    }
     // 检查是否注册监听
     if (!this.has(type)) {
       return Promise.reject(new Error(`CalledEmitter: no listener for event "${type}"`))
     }
 
     const requestId = nanoid()
-    const timeoutMs = 30000
+    const timeoutMs = timeout === null ? undefined : timeout || 60 * 1000
 
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
+      const timer = timeoutMs === undefined ? undefined : setTimeout(() => {
         this.#bus.off(`__reply__${requestId}`)
         reject(new Error(`CalledEmitter request ${type} ${requestId} timeout`))
       }, timeoutMs)
 
       this.#bus.once(`__reply__${requestId}`, (result, error) => {
-        clearTimeout(timer)
+        timer ? clearTimeout(timer) : 0;
         if (error) reject(error)
         else resolve(result)
       })
