@@ -20,6 +20,7 @@ import EnterArrow from "./utils/EnterArrow.vue";
 import GroupEssenceMsgViewer from "./GroupEssenceMsgViewer.vue";
 import GroupFilesViewer from "./GroupFilesViewer.vue";
 import ColorSvg from "./utils/ColorSvg.vue";
+import GroupAlbumViewer from "./GroupAlbumViewer.vue";
 
 const props = defineProps({
   activeContact: Object,
@@ -465,6 +466,12 @@ const changeShowGroupFiles = (isShow = true) => {
   showGroupFilesViewer.value = isShow
 }
 
+const showGroupAlbumViewer = ref(false)
+
+const changeShowGroupAlbum = (isShow = true) => {
+  showGroupAlbumViewer.value = isShow
+}
+
 const initContactInfo = () => {
   // 组件挂载时获取名称
   getName()
@@ -509,6 +516,11 @@ onUnmounted(() => {
       v-if="showGroupFilesViewer"
       :group_id="activeContact?.contact_id"
       :on-close="() => changeShowGroupFiles(false)"
+    />
+    <GroupAlbumViewer
+      v-if="showGroupAlbumViewer"
+      :group_id="activeContact?.contact_id"
+      :on-close="() => changeShowGroupAlbum(false)"
     />
 
     <div class="cannot-drag window-controls" v-if="false">
@@ -571,8 +583,12 @@ onUnmounted(() => {
         群应用
         <div class="group-applications-list">
           <div @click="changeShowGroupFiles()" class="group-app-list-app-container">
-            <img alt="" src="/QQ/icons/filelook_folder_16.svg" class="group-app-icon">
+            <img alt="" src="/QQ/icons/filelook_folder_16.svg" class="group-app-icon"/>
             群文件
+          </div>
+          <div @click="changeShowGroupAlbum()" class="group-app-list-app-container">
+            <ColorSvg alt="" src="/QQ/icons/image_24.svg" class="group-app-icon" style="background-color: #0099ff;"/>
+            群相册
           </div>
           <div @click="changeShowGroupEssenceList()" class="group-app-list-app-container">
             <img alt="" src="/QQ/app/img/essence.bbb878de5480c01292f5.svg" class="group-app-icon"/>

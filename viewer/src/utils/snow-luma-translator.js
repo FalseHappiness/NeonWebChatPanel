@@ -145,24 +145,60 @@ function translateEssenceMsgContent(msgContent) {
   });
 }
 
+/**
+ * 对象字段兼容映射：源对象不存在 mapKey 时，尝试从备选字段取值赋值
+ * @param {object | [object, object]} sourcePair 源对象，或 [源对象, 输出对象]
+ * @param {Record<string, string | string[]>} fieldMap 映射表 {最终字段:备选字段|[备选字段]}
+ * @param {boolean} deleteSourceField 复制完成后是否删除原始备选字段
+ * @returns {object} 处理后的目标对象
+ */
+const objectFieldCompatMap = (sourcePair, fieldMap, deleteSourceField = true) => {
+  let sourceObj, targetObj;
+  // 如果传入单个对象，则源和目标共用同一个对象；否则解构 [源对象, 目标对象]
+  if (!Array.isArray(sourcePair)) {
+    sourceObj = sourcePair;
+    targetObj = sourcePair;
+  } else {
+    [sourceObj, targetObj] = sourcePair;
+  }
+
+  // finalKey：最终要使用的字段名
+  for (const finalKey in fieldMap) {
+    // 核心条件：源对象没有最终字段，才进行兼容赋值
+    if (!sourceObj.hasOwnProperty(finalKey)) {
+      let fallbackFieldList = fieldMap[finalKey];
+      if (!Array.isArray(fallbackFieldList)) {
+        fallbackFieldList = [fallbackFieldList];
+      }
+
+      // fallbackField：旧的备选字段名称
+      for (const fallbackField of fallbackFieldList) {
+        if (sourceObj.hasOwnProperty(fallbackField)) {
+          targetObj[finalKey] = sourceObj[fallbackField];
+          if (deleteSourceField) {
+            delete sourceObj[fallbackField];
+          }
+        }
+      }
+    }
+  }
+  return targetObj;
+};
+
 const convertEssenceMsgListSL = list => {
   if (!Array.isArray(list)) return list;
   const newList = []
   for (const msg of list) {
     if (typeof msg === 'object') {
       const newMsg = { ...msg }
-      if (!msg.hasOwnProperty("operator_id")) {
-        newMsg.operator_id = msg.add_digest_uin
-      }
-      if (!msg.hasOwnProperty("operator_nick")) {
-        newMsg.operator_nick = msg.add_digest_nick
-      }
-      if (!msg.hasOwnProperty("operator_time")) {
-        newMsg.operator_time = msg.add_digest_time
-      }
-      if (!msg.hasOwnProperty("sender_id")) {
-        newMsg.sender_id = msg.sender_uin
-      }
+
+      objectFieldCompatMap([msg, newMsg], {
+        operator_id: "add_digest_uin",
+        operator_nick: "add_digest_nick",
+        operator_time: "add_digest_time",
+        sender_id: "sender_id"
+      })
+
       if (!msg.hasOwnProperty("content") && Array.isArray(msg.msg_content)) {
         newMsg.content = translateEssenceMsgContent(msg.msg_content)
       }
@@ -174,7 +210,20 @@ const convertEssenceMsgListSL = list => {
   return newList
 }
 
+const compatGroupAlbumImageField = image => {
+  return typeof image === 'object' ? objectFieldCompatMap({ ...image }, {
+    photo_url: "photoUrls",
+    default_url: "defaultUrl",
+    is_gif: "isGif",
+    has_raw: "hasRaw"
+  }) : image
+}
+
 function convertGroupAlbum(input) {
+  if (typeof input !== 'object') {
+    return input
+  }
+  const coverImage = input.cover?.image
   return {
     album_id: input.id,
     owner: input.owner,
@@ -182,14 +231,11 @@ function convertGroupAlbum(input) {
     desc: input.desc,
     create_time: String(input.createTime),
     modify_time: "0",
-    last_upload_time: "0",
+    last_upload_time: String(input.last_upload_time),
     upload_number: String(input.picNum),
     cover: {
       type: 0,
-      image: {
-        photo_url: [],
-        default_url: { url: "", width: 0, height: 0 },
-      },
+      image: compatGroupAlbumImageField(coverImage),
     },
     creator: {
       nick: input.createnickname,
@@ -201,16 +247,52 @@ function convertGroupAlbum(input) {
 const convertGroupAlbumListSL = data => {
   const newData = []
   for (const item of data) {
-
+    newData.push(convertGroupAlbum(item))
   }
-  return newData
+  return {
+    album_list: newData,
+    attach_info: "",
+    has_more: false
+  }
+}
+
+const convertGroupAlbumMediaListSL = data => {
+  data = { ...data }
+  objectFieldCompatMap(data, {
+    media_list: "mediaList",
+    next_attach_info: "nextAttachInfo"
+  })
+
+  if (!data.hasOwnProperty("next_has_more")) {
+    data.next_has_more = !!data.next_attach_info
+  }
+
+  const media_list = [...data.media_list]
+  for (const key in media_list) {
+    let media = media_list[key]
+    if (typeof media === 'object') {
+      media = { ...media }
+      objectFieldCompatMap(media, { batch_id: "batchId", upload_time: "uploadTime" })
+      media.image = compatGroupAlbumImageField(media.image)
+      let video = media.video
+      if (typeof video === 'object') {
+        video = objectFieldCompatMap({ ...video }, {
+          video_time: "videoTime",
+          video_url: ["videoUrl", 'videoUrls']
+        })
+        video.cover = compatGroupAlbumImageField(video.cover)
+        media.video = video
+      }
+      media_list[key] = media
+    }
+  }
+  data.media_list = media_list
+  return data
 }
 
 const convertGroupFilesSL = data => {
   data?.folders?.forEach(v => {
-    if (v?.hasOwnProperty("create_name")) {
-      v.creator_name = v.create_name
-    }
+    objectFieldCompatMap(v, { creator_name: "create_name" })
   })
   return data
 }
@@ -219,6 +301,7 @@ export {
   convertWrappedMsgSL,
   convertEssenceMsgListSL,
   convertGroupAlbumListSL,
+  convertGroupAlbumMediaListSL,
   convertGroupFilesSL,
   convertContactsSL,
 }

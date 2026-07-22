@@ -9,7 +9,7 @@ import { CalledEmitter } from "../composables/event-bus.js";
 import {
   convertContactsSL,
   convertEssenceMsgListSL,
-  convertGroupAlbumListSL,
+  convertGroupAlbumListSL, convertGroupAlbumMediaListSL,
   convertGroupFilesSL,
   convertWrappedMsgSL
 } from "./snow-luma-translator.js";
@@ -556,6 +556,14 @@ const fetchGroupAlbumList = async (group_id, attach_info) => {
   }
 }
 
+const fetchGroupAlbumMediaList = async (group_id, album_id, attach_info) => {
+  return convertGroupAlbumMediaListSL(await fetchActionData("get_group_album_media_list", {
+    group_id,
+    album_id,
+    attach_info
+  }))
+}
+
 
 const fetchAiRecordCharacters = async (group_id) => {
   return await fetchActionData("get_ai_characters", { group_id })
@@ -940,4 +948,6 @@ export {
   getGroupFileProxyUrl,
   fetchAiRecordCharacters,
   fetchSendGroupAiRecord,
+  fetchGroupAlbumList,
+  fetchGroupAlbumMediaList,
 }
