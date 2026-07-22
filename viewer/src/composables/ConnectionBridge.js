@@ -1,25 +1,45 @@
-import { ref, onUnmounted } from 'vue'
+import { ref } from 'vue'
 import { nanoid } from "nanoid";
 import { fetchAPIVersionInfo, fetchSyncMessages } from "../utils/backend-api.js";
 import { convertWrappedMsgSL } from "../utils/snow-luma-translator.js";
 import { useGlobalStore } from "../store/global.js";
 import { isSupportedNoticeMessage } from "../utils/parse-message.js";
 
-export function useWebSocket(url, { onMessage, onNewContact, onNotice }) {
-  const socket = ref(null)
-  const lastMessageId = ref(0) // 记录最后收到的消息ID
-  const reconnectAttempts = ref(0)
-  const maxReconnectAttempts = Infinity // 无限重连
-  const reconnectInterval = 3000 // 重连间隔
-  const isConnected = ref(false)
-  const shouldSync = ref(false) // 是否需要同步消息
-  let reconnectTimer = null // 重连定时器
-  let isClosed = false;
+export class ConnectionBridge {
+  /**
+   * @param {string} url websocket地址
+   * @param {object} callbacks
+   * @param {Function} callbacks.onMessage
+   * @param {Function} callbacks.onNewContact
+   * @param {Function} callbacks.onNotice
+   */
+  constructor(url, { onMessage, onNewContact, onNotice }) {
+    this.url = url
+    this.callbacks = {
+      onMessage,
+      onNewContact,
+      onNotice
+    }
 
-  // 存储正在等待响应的 send_action 回调
-  const pendingActions = new Map()
-  // 存储正在等待响应的 req_backend 回调
-  const pendingBackendRequests = new Map()
+    // 实例状态（保留ref方便vue直接绑定）
+    this.socket = ref(null)
+    this.lastMessageId = ref(0) // 记录最后收到的消息ID
+    this.reconnectAttempts = ref(0)
+    this.maxReconnectAttempts = Infinity // 无限重连
+    this.reconnectInterval = 3000 // 重连间隔
+    this.isConnected = ref(false)
+    this.shouldSync = ref(false) // 是否需要同步消息
+    this.reconnectTimer = null // 重连定时器
+    this.isClosed = false;
+
+    // 存储正在等待响应的 send_action 回调
+    this.pendingActions = new Map()
+    // 存储正在等待响应的 req_backend 回调
+    this.pendingBackendRequests = new Map()
+
+    // 初始化连接
+    this.connect()
+  }
 
   /**
    * 通用WebSocket请求底层方法（抽取sendAction/reqBackend重复逻辑）
@@ -28,14 +48,14 @@ export function useWebSocket(url, { onMessage, onNewContact, onNotice }) {
    * @param {string} [options.action] - action名称（send_action专用）
    * @param {string} [options.endpoint] - 后端接口地址（req_backend专用）
    * @param {object} options.params - 请求参数
-   * @param signal - 终止信号
+   * @param {AbortSignal|null|undefined} signal - 终止信号
    * @param {number} timeout - 超时时间(毫秒)
-   * @param {Map} pendingMap -  pending回调存储Map
-   * @<any>} 请求响应数据
+   * @param {Map} pendingMap - pending回调存储Map
+   * @returns {Promise<any>} 请求响应数据
    */
-  const _commonWebSocketRequest = (options, signal, timeout, pendingMap) => {
+  _commonWebSocketRequest(options, signal, timeout, pendingMap) {
     return new Promise((resolve, reject) => {
-      if (!socket.value || socket.value.readyState !== WebSocket.OPEN) {
+      if (!this.socket.value || this.socket.value.readyState !== WebSocket.OPEN) {
         reject(new Error('WebSocket is not connected'))
         return
       }
@@ -61,8 +81,8 @@ export function useWebSocket(url, { onMessage, onNewContact, onNotice }) {
           pendingMap.delete(echo)
           cleanup()
           // 通知后端取消该请求
-          if (socket.value && socket.value.readyState === WebSocket.OPEN) {
-            socket.value.send(JSON.stringify({
+          if (this.socket.value && this.socket.value.readyState === WebSocket.OPEN) {
+            this.socket.value.send(JSON.stringify({
               type: 'cancel_action',
               echo: echo
             }))
@@ -104,7 +124,7 @@ export function useWebSocket(url, { onMessage, onNewContact, onNotice }) {
       }
 
       // 发送请求
-      socket.value.send(JSON.stringify(sendData))
+      this.socket.value.send(JSON.stringify(sendData))
     })
   }
 
@@ -112,12 +132,12 @@ export function useWebSocket(url, { onMessage, onNewContact, onNotice }) {
    * 通过 WebSocket 发送 action 请求并等待响应
    * @param {string} action - OneBot action 名称
    * @param {object} params - action 参数
-   * @param signal          - 终止信号
+   * @param {AbortSignal} [signal] - 终止信号
    * @param {number} timeout - 超时时间(毫秒)
-   <any>} action 响应数据
+   * @returns {Promise<any>} action 响应数据
    */
-  const sendAction = (action, params = {}, signal = undefined, timeout = 60 * 1000) => {
-    return _commonWebSocketRequest(
+  sendAction(action, params = {}, signal = undefined, timeout = 60 * 1000) {
+    return this._commonWebSocketRequest(
       {
         type: 'send_action',
         action,
@@ -125,7 +145,7 @@ export function useWebSocket(url, { onMessage, onNewContact, onNotice }) {
       },
       signal,
       timeout,
-      pendingActions
+      this.pendingActions
     )
   }
 
@@ -133,12 +153,12 @@ export function useWebSocket(url, { onMessage, onNewContact, onNotice }) {
    * 通过 WebSocket 发送 req_backend 请求并等待响应
    * @param {string} endpoint - 后端 endpoint 名称 (contacts / get_msg / messages / sync)
    * @param {object} params - 请求参数
-   * @param signal          - 终止信号
+   * @param {AbortSignal} [signal] - 终止信号
    * @param {number} timeout - 超时时间(毫秒)
-   * @returns {<any>} 后端响应数据
+   * @returns {Promise<any>} 后端响应数据
    */
-  const reqBackend = (endpoint, params = {}, signal = undefined, timeout = 60 * 1000) => {
-    return _commonWebSocketRequest(
+  reqBackend(endpoint, params = {}, signal = undefined, timeout = 60 * 1000) {
+    return this._commonWebSocketRequest(
       {
         type: 'req_backend',
         endpoint,
@@ -146,18 +166,18 @@ export function useWebSocket(url, { onMessage, onNewContact, onNotice }) {
       },
       signal,
       timeout,
-      pendingBackendRequests
+      this.pendingBackendRequests
     )
   }
 
-  const onReceiveMessage = (message, echo_msg = false) => {
+  onReceiveMessage(message, echo_msg = false) {
     try {
       // 检查是否是 send_action 的响应
       if (message.type === 'send_action_response') {
         const echo = message.echo
-        if (echo && pendingActions.has(echo)) {
-          const { resolve, cleanup } = pendingActions.get(echo)
-          pendingActions.delete(echo)
+        if (echo && this.pendingActions.has(echo)) {
+          const { resolve, cleanup } = this.pendingActions.get(echo)
+          this.pendingActions.delete(echo)
           cleanup && cleanup()
           resolve(message)
         }
@@ -167,50 +187,50 @@ export function useWebSocket(url, { onMessage, onNewContact, onNotice }) {
       // 检查是否是 req_backend 的响应
       if (message.type === 'req_backend_response') {
         const echo = message.echo
-        if (echo && pendingBackendRequests.has(echo)) {
-          const { resolve, cleanup } = pendingBackendRequests.get(echo)
-          pendingBackendRequests.delete(echo)
+        if (echo && this.pendingBackendRequests.has(echo)) {
+          const { resolve, cleanup } = this.pendingBackendRequests.get(echo)
+          this.pendingBackendRequests.delete(echo)
           cleanup && cleanup()
           resolve(message)
         }
         return
       }
 
-      if (message.id > lastMessageId.value) {
-        lastMessageId.value = message.id
+      if (message.id > this.lastMessageId.value) {
+        this.lastMessageId.value = message.id
       }
       message = convertWrappedMsgSL(message)
       if (echo_msg) {
         console.log(message.post_type === 'notice' ? "收到新通知:" : "收到新消息:", message);
       }
-      handleNewMessage(message)
-      handleNewNotice(message)
+      this.handleNewMessage(message)
+      this.handleNewNotice(message)
     } catch (error) {
       console.error('Error parsing WebSocket message:', error)
     }
   }
 
   // 同步新消息
-  const syncMessages = async () => {
+  async syncMessages() {
     try {
-      (await fetchSyncMessages(lastMessageId.value))?.messages?.forEach(message => {
-        onReceiveMessage(message)
+      (await fetchSyncMessages(this.lastMessageId.value))?.messages?.forEach(message => {
+        this.onReceiveMessage(message)
       })
-      shouldSync.value = false
+      this.shouldSync.value = false
     } catch (error) {
       console.error('Sync failed:', error)
       // 同步失败，稍后重试
-      setTimeout(syncMessages, 5000)
+      setTimeout(() => this.syncMessages(), 5000)
     }
   }
 
   // 处理新消息
-  const handleNewMessage = (message) => {
+  handleNewMessage(message) {
     if (!["message", "message_sent"].includes(message.post_type)) {
       return
     }
 
-    onMessage(message)
+    this.callbacks.onMessage(message)
 
     // 检查是否是新的联系人
     const contactId = message.message_type === 'group' ? message.group_id : (message.target_id || message.user_id)
@@ -218,7 +238,7 @@ export function useWebSocket(url, { onMessage, onNewContact, onNotice }) {
     const event = typeof message.event === 'string' ? JSON.parse(message.event) : message.event;
     const contactName = event?.group_name || event?.sender?.nickname
 
-    onNewContact({
+    this.callbacks.onNewContact({
       contact_id: contactId,
       type: contactType,
       name: contactName,
@@ -231,18 +251,18 @@ export function useWebSocket(url, { onMessage, onNewContact, onNotice }) {
     })
   }
 
-  const handleNewNotice = notice => {
+  handleNewNotice(notice) {
     if (notice.post_type !== 'notice') {
       return
     }
 
-    onNotice(notice)
+    this.callbacks.onNotice(notice)
 
     if (isSupportedNoticeMessage(notice)) {
       const type = notice.group_id ? "group" : "private"
       const contact_id = notice.group_id || notice.user_id
 
-      onNewContact({
+      this.callbacks.onNewContact({
         contact_id: contact_id,
         type: type,
         name: null,
@@ -257,83 +277,83 @@ export function useWebSocket(url, { onMessage, onNewContact, onNotice }) {
   }
 
   // 清理所有pending请求
-  const clearAllPending = () => {
-    for (const [echo, { reject, cleanup }] of pendingActions) {
+  clearAllPending() {
+    for (const [echo, { reject, cleanup }] of this.pendingActions) {
       cleanup && cleanup()
       reject(new Error('WebSocket disconnected'))
     }
-    pendingActions.clear()
+    this.pendingActions.clear()
 
-    for (const [echo, { reject, cleanup }] of pendingBackendRequests) {
+    for (const [echo, { reject, cleanup }] of this.pendingBackendRequests) {
       cleanup && cleanup()
       reject(new Error('WebSocket disconnected'))
     }
-    pendingBackendRequests.clear()
+    this.pendingBackendRequests.clear()
   }
 
   // 彻底关闭WebSocket连接，不再重连
-  const disconnect = () => {
+  disconnect() {
     // 清除重连定时器
-    if (reconnectTimer) {
-      clearTimeout(reconnectTimer)
-      reconnectTimer = null
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer)
+      this.reconnectTimer = null
     }
 
-    isClosed = true;
+    this.isClosed = true;
 
     // 重置重连次数，防止自动重连
-    reconnectAttempts.value = maxReconnectAttempts
+    this.reconnectAttempts.value = this.maxReconnectAttempts
 
     // 清理所有待处理的请求
-    clearAllPending()
+    this.clearAllPending()
 
     // 关闭WebSocket连接（code 1000 表示正常关闭，不会触发重连）
-    if (socket.value) {
-      socket.value.close(1000, 'Client disconnect')
-      socket.value = null
+    if (this.socket.value) {
+      this.socket.value.close(1000, 'Client disconnect')
+      this.socket.value = null
     }
 
     // 重置连接状态
-    isConnected.value = false
-    shouldSync.value = false
+    this.isConnected.value = false
+    this.shouldSync.value = false
   }
 
   // 连接WebSocket
-  const connect = () => {
+  connect() {
     // 清除之前的重连定时器
-    if (reconnectTimer) {
-      clearTimeout(reconnectTimer)
-      reconnectTimer = null
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer)
+      this.reconnectTimer = null
     }
 
-    socket.value = new WebSocket(url)
+    this.socket.value = new WebSocket(this.url)
 
-    socket.value.onopen = () => {
-      if (isClosed) {
+    this.socket.value.onopen = () => {
+      if (this.isClosed) {
         return
       }
-      isConnected.value = true
-      reconnectAttempts.value = 0
+      this.isConnected.value = true
+      this.reconnectAttempts.value = 0
       console.log('WebSocket connected')
 
       // 连接成功后同步消息
-      if (shouldSync.value) {
-        syncMessages()
+      if (this.shouldSync.value) {
+        this.syncMessages()
       }
       fetchAPIVersionInfo()
         .then(info => useGlobalStore().apiVersionInfo = info)
         .catch(e => console.log("Unable to get api version info:", e))
     }
 
-    socket.value.onmessage = (event) => {
-      if (isClosed) {
+    this.socket.value.onmessage = (event) => {
+      if (this.isClosed) {
         return
       }
-      onReceiveMessage(JSON.parse(event.data), true)
+      this.onReceiveMessage(JSON.parse(event.data), true)
     }
 
-    socket.value.onclose = ev => {
-      isConnected.value = false
+    this.socket.value.onclose = (ev) => {
+      this.isConnected.value = false
       console.log('WebSocket disconnected')
 
       // 区分：主动关闭 不再重连
@@ -341,42 +361,30 @@ export function useWebSocket(url, { onMessage, onNewContact, onNotice }) {
       if (ev.code === 1000) return
 
       // 标记需要同步
-      shouldSync.value = true
+      this.shouldSync.value = true
 
       // 拒绝所有 pending 的 action
-      clearAllPending()
+      this.clearAllPending()
 
       // 无限重连
-      if (reconnectAttempts.value < maxReconnectAttempts) {
-        reconnectAttempts.value++
-        const delay = Math.min(reconnectInterval * reconnectAttempts.value, 30000) // 最大30秒间隔
+      if (this.reconnectAttempts.value < this.maxReconnectAttempts) {
+        this.reconnectAttempts.value++
+        const delay = Math.min(this.reconnectInterval * this.reconnectAttempts.value, 30000) // 最大30秒间隔
         console.log(`Reconnecting in ${delay / 1000} seconds...`)
-        reconnectTimer = setTimeout(connect, delay)
+        this.reconnectTimer = setTimeout(() => this.connect(), delay)
       }
     }
 
-    socket.value.onerror = (error) => {
+    this.socket.value.onerror = (error) => {
       console.error('WebSocket error:', error)
-      socket.value?.close()
+      this.socket.value?.close()
     }
   }
 
-  // 初始化连接
-  connect()
-
-  // 组件卸载时关闭连接
-  onUnmounted(() => {
-    disconnect()
-  })
-
-  // 暴露给组件的API
-  return {
-    socket,
-    isConnected,
-    lastMessageId,
-    syncMessages,
-    sendAction,
-    reqBackend,
-    disconnect // 新增：彻底关闭连接的方法
+  /**
+   * 在组件卸载时调用，释放资源
+   */
+  destroy() {
+    this.disconnect()
   }
 }

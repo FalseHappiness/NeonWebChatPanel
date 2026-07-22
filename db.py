@@ -396,7 +396,7 @@ class Database:
                                         OR
                                         -- 第二种群聊消息条件
                                     (group_id IS NOT NULL AND group_id != 0 AND
-                                     sub_type IN ('poke', 'add', 'ban', 'lift_ban', 'approve', 'invite', 'kick_me') AND
+                                     sub_type IN ('poke', 'add', 'ban', 'lift_ban', 'approve', 'invite', 'kick_me', 'remove') AND
                                      notice_type IN ('notify', 'essence', 'group_ban', 'group_increase', 'group_decrease', 'group_msg_emoji_like') AND
                                      post_type = 'notice')
                                     )

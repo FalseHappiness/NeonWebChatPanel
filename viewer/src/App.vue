@@ -1,6 +1,6 @@
 <script setup>
 import { onMounted, onUnmounted, ref, watch, onBeforeUnmount } from 'vue'
-import { useWebSocket } from './composables/useWebSocket'
+import { ConnectionBridge } from './composables/ConnectionBridge.js'
 import ContactList from './components/ContactList.vue'
 import ChatArea from './components/ChatArea.vue'
 import {
@@ -23,124 +23,75 @@ const activeContact = ref(null)
 const chatArea = ref(null)
 const wsInited = ref(false);
 
-// 初始化WebSocket
-const {
-  isConnected,
-  lastMessageId,
-  syncMessages,
-  socket,
-  sendAction,
-  reqBackend,
-  disconnect: disconnectWebsocket
-} = useWebSocket(wsUri, {
-  onMessage: (message) => {
-    // 检查消息是否属于当前活跃的联系人
-    const isCurrentContact = activeContact.value && (
-      (message.message_type === 'group' &&
-        activeContact.value.type === 'group' &&
-        message.group_id === activeContact.value.contact_id) ||
-      (message.message_type === 'private' &&
-        activeContact.value.type === 'private' &&
-        message.target_id === activeContact.value.contact_id)
-    )
+// bridge实例，onMounted内部初始化
+let bridge = null
+// 向外暴露bridge响应式状态，替代原来useWebSocket解构变量
+const isConnected = ref(false)
+const lastMessageId = ref(0)
 
-    if (isCurrentContact) {
-      chatArea.value?.$refs?.scroller?.addMessage(message)
-    }
-  },
-  onNotice: notice => {
-    if (['group_recall', 'friend_recall'].includes(notice.notice_type)) {
-      const is_group = notice.notice_type === 'group_recall'
-      const isCurrentContact = activeContact.value && (
-        (
-          is_group &&
-          activeContact.value.type === 'group' &&
-          notice.group_id === activeContact.value.contact_id
-        ) ||
-        (
-          !is_group &&
-          activeContact.value.type === 'private' &&
-          (notice.user_id === activeContact.value.contact_id || notice.user_id === notice.self_id)
-        )
-      )
-      if (isCurrentContact) {
-        const visibleMessages = chatArea.value?.$refs?.scroller?.visibleMessages
-        if (visibleMessages) {
-          visibleMessages.forEach(msg => {
-            if (msg?.message_id === notice.message_id) {
-              let event = msg.event
-              event = typeof event === 'string' ? JSON.parse(event) : event
-              event.recall_operator = is_group ? notice.operator_id : notice.user_id
-              msg.event = JSON.stringify(event)
-            }
-          })
-        }
-      }
-    } else if (isSupportedNoticeMessage(notice)) {
-      const is_group = !!notice.group_id
-      const isCurrentContact = activeContact.value && (
-        (
-          is_group &&
-          activeContact.value.type === 'group' &&
-          notice.group_id === activeContact.value.contact_id
-        ) ||
-        (
-          !is_group &&
-          activeContact.value.type === 'private' &&
-          notice.user_id === activeContact.value.contact_id
-        )
-      )
-      if (isCurrentContact) {
-        chatArea.value?.$refs?.scroller?.addMessage(notice)
-      }
-    }
-  },
-  onNewContact: (newContact) => {
-    // 检查是否已存在该联系人
-    const contactExists = contacts.value.some(
-      c => c.contact_id === newContact.contact_id && c.type === newContact.type
-    )
-
-    if (!contactExists) {
-      contacts.value.unshift({
-        contact_id: newContact.contact_id,
-        type: newContact.type,
-        name: newContact.name,
-        last_time: newContact.last_time,
-        latest_msg: newContact.latest_msg,
-        // min_id: newContact.min_id,
-        // max_id: newContact.max_id,
-        // max_real_seq: newContact.max_real_seq,
-        // min_real_seq: newContact.min_real_seq,
-        max_cursor: newContact.max_cursor,
-        min_cursor: newContact.min_cursor,
-      })
-    } else {
-      const index = contacts.value.findIndex(
-        c => c.contact_id === newContact.contact_id && c.type === newContact.type
-      )
-      if (index !== -1) {
-        contacts.value[index].name = newContact.name
-        contacts.value[index].last_time = newContact.last_time
-        contacts.value[index].latest_msg = newContact.latest_msg
-        // contacts.value[index].min_id = newContact.min_id
-        // contacts.value[index].max_id = newContact.max_id
-        // contacts.value[index].max_real_seq = newContact.max_real_seq
-        // contacts.value[index].min_real_seq = newContact.min_real_seq
-        contacts.value[index].max_cursor = newContact.max_cursor
-        contacts.value[index].min_cursor = newContact.min_cursor
-        const [contact] = contacts.value.splice(index, 1)
-        contacts.value.unshift(contact)
-      }
-    }
+// 选择联系人
+const selectContact = (contact) => {
+  if (chatArea.value?.$refs?.scroller?.initializing) return
+  // 如果已经是当前联系人
+  if (activeContact.value?.contact_id === contact?.contact_id &&
+    activeContact.value?.type === contact?.type) {
+    activeContact.value = null;
+    groupEssenceMsgList.value = null
+    return;
   }
-})
+  activeContact.value = contact
+}
 
-// 监听连接状态变化
-watch(isConnected, (connected) => {
-  if (connected) {
-    console.log('WebSocket reconnected, checking for missed messages...')
-    wsInited.value = true;
+const setRealContactName = name => {
+  activeContact.value.name = name
+}
+
+const selfInfo = ref(null)
+
+const changeGroupContactRemark = async (contact_id, remark) => {
+  const result = await fetchSetGroupRemark(
+    contact_id,
+    remark
+  );
+  if (result.status === 'ok') {
+    for (const contact of contacts.value) {
+      if (contact.contact_id === contact_id) {
+        contact.remark = remark;
+        contact.name = remark || contact.real_name
+        setGroupNameCache(contact_id, contact.name)
+      }
+    }
+  } else {
+    console.log("Change group contact remark error: ", contact_id, remark, result)
+    showErrorToast(`改变群 ${contact_id} 备注为 ${remark} 失败`)
+  }
+}
+
+const changeSelfLongNick = async longNick => {
+  const result = await fetchSetLongNick(longNick)
+  if (result?.status === 'ok') {
+    selfInfo.value.long_nick = selfInfo.value.longNick = longNick;
+  } else {
+    console.log("Change self long nick error: ", longNick, result)
+    showErrorToast(`改变个性签名为 ${longNick} 失败`)
+  }
+
+}
+
+const initAppData = () => {
+  getFriendsDisplayName()
+  getContacts()
+  fetchLoginInfo().then(
+    async info => {
+      selfInfo.value = info
+      selfInfo.value = await fetchStrangerInfo(info.user_id)
+    }
+  )
+}
+
+watch(wsInited, newVal => {
+  if (newVal) {
+    initAppData()
   }
 })
 
@@ -283,89 +234,143 @@ const getMessages = async (
   return messages
 }
 
-// 选择联系人
-const selectContact = (contact) => {
-  if (chatArea.value?.$refs?.scroller?.initializing) return
-  // 如果已经是当前联系人
-  if (activeContact.value?.contact_id === contact?.contact_id &&
-    activeContact.value?.type === contact?.type) {
-    activeContact.value = null;
-    groupEssenceMsgList.value = null
-    return;
-  }
-  activeContact.value = contact
-}
-
-const setRealContactName = name => {
-  activeContact.value.name = name
-}
-
-const selfInfo = ref(null)
-
-const changeGroupContactRemark = async (contact_id, remark) => {
-  const result = await fetchSetGroupRemark(
-    contact_id,
-    remark
-  );
-  if (result.status === 'ok') {
-    for (const contact of contacts.value) {
-      if (contact.contact_id === contact_id) {
-        contact.remark = remark;
-        contact.name = remark || contact.real_name
-        setGroupNameCache(contact_id, contact.name)
-      }
-    }
-  } else {
-    console.log("Change group contact remark error: ", contact_id, remark, result)
-    showErrorToast(`改变群 ${contact_id} 备注为 ${remark} 失败`)
-  }
-}
-
-const changeSelfLongNick = async longNick => {
-  const result = await fetchSetLongNick(longNick)
-  if (result?.status === 'ok') {
-    selfInfo.value.long_nick = selfInfo.value.longNick = longNick;
-  } else {
-    console.log("Change self long nick error: ", longNick, result)
-    showErrorToast(`改变个性签名为 ${longNick} 失败`)
-  }
-
-}
-
-const initAppData = () => {
-  getFriendsDisplayName()
-  getContacts()
-  fetchLoginInfo().then(
-    async info => {
-      selfInfo.value = info
-      selfInfo.value = await fetchStrangerInfo(info.user_id)
-    }
-  )
-}
-
-watch(wsInited, newVal => {
-  if (newVal) {
-    initAppData()
-  }
-})
-
-// 初始化数据
-onMounted(() => {
-  initContextMenu()
-  // 提供 sendAction 和 reqBackend 给子组件
-  CalledEmitter.on("sendAction", sendAction)
-  CalledEmitter.on("reqBackend", reqBackend)
-});
-
+// 销毁逻辑
 const destroy = () => {
   destroyContextMenu()
-  disconnectWebsocket()
+  if (bridge) {
+    bridge.destroy()
+    bridge = null
+  }
   CalledEmitter.off('sendAction')
   CalledEmitter.off('reqBackend')
 }
 
-onBeforeUnmount(destroy)
+onMounted(() => {
+  initContextMenu()
 
+  // ========== 在onMounted内部初始化 ConnectionBridge ==========
+  bridge = new ConnectionBridge(wsUri, {
+    onMessage: (message) => {
+      // 检查消息是否属于当前活跃的联系人
+      const isCurrentContact = activeContact.value && (
+        (message.message_type === 'group' &&
+          activeContact.value.type === 'group' &&
+          message.group_id === activeContact.value.contact_id) ||
+        (message.message_type === 'private' &&
+          activeContact.value.type === 'private' &&
+          message.target_id === activeContact.value.contact_id)
+      )
+
+      if (isCurrentContact) {
+        chatArea.value?.$refs?.scroller?.addMessage(message)
+      }
+    },
+    onNotice: notice => {
+      if (['group_recall', 'friend_recall'].includes(notice.notice_type)) {
+        const is_group = notice.notice_type === 'group_recall'
+        const isCurrentContact = activeContact.value && (
+          (
+            is_group &&
+            activeContact.value.type === 'group' &&
+            notice.group_id === activeContact.value.contact_id
+          ) ||
+          (
+            !is_group &&
+            activeContact.value.type === 'private' &&
+            (notice.user_id === activeContact.value.contact_id || notice.user_id === notice.self_id)
+          )
+        )
+        if (isCurrentContact) {
+          const visibleMessages = chatArea.value?.$refs?.scroller?.visibleMessages
+          if (visibleMessages) {
+            visibleMessages.forEach(msg => {
+              if (msg?.message_id === notice.message_id) {
+                let event = msg.event
+                event = typeof event === 'string' ? JSON.parse(event) : event
+                event.recall_operator = is_group ? notice.operator_id : notice.user_id
+                msg.event = JSON.stringify(event)
+              }
+            })
+          }
+        }
+      } else if (isSupportedNoticeMessage(notice)) {
+        const is_group = !!notice.group_id
+        const isCurrentContact = activeContact.value && (
+          (
+            is_group &&
+            activeContact.value.type === 'group' &&
+            notice.group_id === activeContact.value.contact_id
+          ) ||
+          (
+            !is_group &&
+            activeContact.value.type === 'private' &&
+            notice.user_id === activeContact.value.contact_id
+          )
+        )
+        if (isCurrentContact) {
+          chatArea.value?.$refs?.scroller?.addMessage(notice)
+        }
+      }
+    },
+    onNewContact: (newContact) => {
+      // 检查是否已存在该联系人
+      const contactExists = contacts.value.some(
+        c => c.contact_id === newContact.contact_id && c.type === newContact.type
+      )
+
+      if (!contactExists) {
+        contacts.value.unshift({
+          contact_id: newContact.contact_id,
+          type: newContact.type,
+          name: newContact.name,
+          last_time: newContact.last_time,
+          latest_msg: newContact.latest_msg,
+          // min_id: newContact.min_id,
+          // max_id: newContact.max_id,
+          // max_real_seq: newContact.max_real_seq,
+          // min_real_seq: newContact.min_real_seq,
+          max_cursor: newContact.max_cursor,
+          min_cursor: newContact.min_cursor,
+        })
+      } else {
+        const index = contacts.value.findIndex(
+          c => c.contact_id === newContact.contact_id && c.type === newContact.type
+        )
+        if (index !== -1) {
+          contacts.value[index].name = newContact.name
+          contacts.value[index].last_time = newContact.last_time
+          contacts.value[index].latest_msg = newContact.latest_msg
+          // contacts.value[index].min_id = newContact.min_id
+          // contacts.value[index].max_id = newContact.max_id
+          // contacts.value[index].max_real_seq = newContact.max_real_seq
+          // contacts.value[index].min_real_seq = newContact.min_real_seq
+          contacts.value[index].max_cursor = newContact.max_cursor
+          contacts.value[index].min_cursor = newContact.min_cursor
+          const [contact] = contacts.value.splice(index, 1)
+          contacts.value.unshift(contact)
+        }
+      }
+    }
+  })
+
+  // 同步bridge内部响应式变量到组件作用域
+  watch(bridge.isConnected, val => {
+    isConnected.value = val
+    if (val) {
+      console.log('WebSocket reconnected, checking for missed messages...')
+      wsInited.value = true;
+    }
+  })
+  watch(bridge.lastMessageId, val => {
+    lastMessageId.value = val
+  })
+
+  // 提供 sendAction 和 reqBackend 给子组件
+  CalledEmitter.on("sendAction", bridge.sendAction.bind(bridge))
+  CalledEmitter.on("reqBackend", bridge.reqBackend.bind(bridge))
+});
+
+onBeforeUnmount(destroy)
 onUnmounted(destroy)
 </script>
 
@@ -392,6 +397,9 @@ onUnmounted(destroy)
       @change-group-contact-remark="changeGroupContactRemark"
     />
     <ContactInfoTooltip/>
+  </div>
+  <div class="text-center" v-else>
+    WebSocket 初始化...
   </div>
 </template>
 
