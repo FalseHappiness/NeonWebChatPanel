@@ -218,20 +218,22 @@ const fetchSendMessageOptions = async ({ contact, message, signal, timeout = und
     const firstSeg = message[0];
     if (firstSeg.type === 'poke' && firstSeg.data) {
       const pokeData = firstSeg.data;
-      const pokeUser = pokeData.user_id ?? -1;
-      const pokeGroup = pokeData.group_id ?? -1;
-      const pokeTarget = pokeData.target_id ?? -1;
+      if (!pokeData.hasOwnProperty("id") && !pokeData.hasOwnProperty("type")) { // 不是窗口抖动
+        const pokeUser = pokeData.user_id ?? -1;
+        const pokeGroup = pokeData.group_id ?? -1;
+        const pokeTarget = pokeData.target_id ?? -1;
 
-      const reqData = {
-        user_id: pokeUser || pokeTarget,
-        target_id: pokeTarget || pokeUser,
-      };
-      if (pokeGroup !== -1) {
-        reqData.group_id = pokeGroup;
-      }
+        const reqData = {
+          user_id: pokeUser || pokeTarget,
+          target_id: pokeTarget || pokeUser,
+        };
+        if (pokeGroup !== -1) {
+          reqData.group_id = pokeGroup;
+        }
 
-      if (pokeUser !== -1) {
-        return await fetchAction("send_poke", reqData, signal, timeout);
+        if (pokeUser !== -1) {
+          return await fetchAction("send_poke", reqData, signal, timeout);
+        }
       }
     }
   }

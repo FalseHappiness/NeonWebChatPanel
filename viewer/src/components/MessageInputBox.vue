@@ -1358,15 +1358,20 @@ export default defineComponent({
       this.quotedMessage = null
     },
 
-    handleMessageInputShake() {
-      if (!this.activeContact) return
+    async handleMessageInputShake(type = 1) {
+      if (!this.isPrivate) return
 
-      fetchSendMessage(this.activeContact, [{
-        type: 'shake',
+      const result = await fetchSendMessage(this.activeContact, [{
+        type: 'poke',
         data: {
-          user_id: this.activeContact.contact_id
+          type,
+          id: type
         }
       }])
+      if (result?.status !== 'ok') {
+        showErrorToast("发送窗口抖动失败")
+        console.log("Send private shake error:", result)
+      }
     },
 
     handleQuoteMessage(msg) {
@@ -2483,7 +2488,7 @@ export default defineComponent({
                           <template #target>
                             <div
                               class="message-input-expression-emoji-box"
-                              @click="this.handleExpressionInput"
+                              @click="handleExpressionInput"
                               :data-emoji="emoji"
                             >
                               <img
@@ -2540,7 +2545,7 @@ export default defineComponent({
 
 
             <Tooltip
-              v-if="activeContact?.type === 'private' && false"
+              v-if="isPrivate"
               content="窗口抖动"
               use-target-slot
             >
@@ -2549,7 +2554,7 @@ export default defineComponent({
                   src="/QQ/icons/shake_24.svg"
                   class="message-input-ctrl-icon"
                   ref="shakeControl"
-                  @click="handleMessageInputShake"
+                  @click="handleMessageInputShake()"
                 ></color-svg>
               </template>
             </Tooltip>
