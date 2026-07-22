@@ -1,13 +1,27 @@
 <script>
 import { defineComponent } from 'vue'
+import ForwardMessageContentsViewer from "../utils/ForwardMessageContentsViewer.vue";
 
 export default defineComponent({
-  name: "ForwardMessageElement"
+  name: "ForwardMessageElement",
+  components: { ForwardMessageContentsViewer },
+  props: {
+    messages: Array
+  },
+  data() {
+    return {
+      isShowMessagesViewer: false
+    }
+  }
 })
 </script>
 
 <template>
-  <div class="message-box-less message-forward-message no-user-select">
+  <div class="message-box-less message-forward-message no-user-select" @click="isShowMessagesViewer = true">
+    <ForwardMessageContentsViewer
+      :messages="messages"
+      v-if="isShowMessagesViewer && messages"
+      :on-close="()=>{isShowMessagesViewer = false}"/>
     <div class="top-side">
       <p class="title text-truncate">
         <slot name="source"></slot>

@@ -67,7 +67,7 @@ export default defineComponent({
 </script>
 
 <template>
-  <ForwardMessageElement>
+  <ForwardMessageElement :messages="messages">
     <template #source>
       <span v-if="message_type === 'group'">群聊</span>
       <span v-else-if="message_type === 'private' && typeof private_users === 'object'">{{
