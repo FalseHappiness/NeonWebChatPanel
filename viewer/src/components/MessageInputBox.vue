@@ -25,6 +25,7 @@ import CustomScrollBar from "./utils/CustomScrollBar.vue";
 import { showErrorToast, showWarningToast } from "../utils/toast.js";
 import { Icon } from "@iconify/vue";
 import GroupAiRecordEditor from "./utils/GroupAiRecordEditor.vue";
+import { getPokeDescription } from "../utils/faces-config.js";
 
 export default defineComponent({
   name: "MessageInputBox",
@@ -658,7 +659,27 @@ export default defineComponent({
       this.insertNodeAtCursor(fragment);
     },
 
+    isPokeEmoji(emoji_id) {
+      return !!this.getPokeEmojiNum(emoji_id)
+    },
+
+    getPokeEmojiPath(emoji_id, dynamic = false) {
+      const pokeId = this.getPokeEmojiNum(emoji_id);
+      if (pokeId) {
+        return `/QQ/app/poke/${pokeId}/${pokeId}${dynamic ? "_loop.webp" : ".png"}`;
+      }
+      return null
+    },
+
+    getPokeEmojiNum(emoji_id) {
+      const pokeMatch = String(emoji_id).match(/^poke_([1-6])$/);
+      return pokeMatch ? Number(pokeMatch[1]) : null
+    },
+
     getPngEmojiUrl(emoji_id, forceStatic = false) {
+      if (this.isPokeEmoji(emoji_id)) {
+        return this.getPokeEmojiPath(emoji_id);
+      }
       let add = ''
       if (forceStatic && this.isDynamicDefaultPngEmoji(emoji_id)) {
         add = `_0`
@@ -672,6 +693,9 @@ export default defineComponent({
     },
 
     getApngEmojiUrl(emoji_id) {
+      if (this.isPokeEmoji(emoji_id)) {
+        return this.getPokeEmojiPath(emoji_id, true);
+      }
       const url = `/QQ/EmojiSystermResource/${emoji_id}/apng/${emoji_id}.png`
       return this.emojiFiles.includes(url) ? url : null
     },
@@ -681,6 +705,15 @@ export default defineComponent({
       return animation_src ? animation_src : this.getPngEmojiUrl(emoji_id);
     },
 
+    getEmojiDescription(emoji_id) {
+      const pokeId = this.getPokeEmojiNum(emoji_id)
+      if (pokeId) {
+        return getPokeDescription(pokeId)
+      } else {
+        return this.emojiDescribes[emoji_id]
+      }
+    },
+
     insertEmojiAtCursor(emoji_id) {
       emoji_id = String(emoji_id)
       const img = document.createElement('img');
@@ -688,8 +721,9 @@ export default defineComponent({
       img.src = this.getAnimationEmojiUrl(emoji_id);
       img.dataset.emoji = emoji_id
       img.draggable = true;
-
-      this.insertNodeAtCursor(img)
+      if (img.src) {
+        this.insertNodeAtCursor(img)
+      }
     },
 
     insertTextAtCursor(text) {
@@ -1186,7 +1220,12 @@ export default defineComponent({
           target = target.closest(".message-input-expression-emoji-box")
         }
         if (target) {
-          this.insertEmojiAtCursor(target.dataset.emoji)
+          const emoji = target.dataset.emoji
+          if (this.isPokeEmoji(emoji)) {
+            this.handleMessageInputShake(this.getPokeEmojiNum(emoji))
+          } else {
+            this.insertEmojiAtCursor(emoji)
+          }
         }
       }
     },
@@ -2251,7 +2290,10 @@ export default defineComponent({
     },
     emojiGroupList() {
       const category = {
-        "互动表情": [114, 358, 359],
+        "互动表情": [
+          114, 358, 359,
+          ...(this.isPrivate ? Array.from({ length: 6 }, (_, i) => `poke_${i + 1}`) : [])// 窗口抖动
+        ],
         "汪汪": [360, 361, 362, 363, 364, 365, 366, 367, 396, 397],
         "喜花妮": [404, 405, 406, 407, 408, 409, 410, 411, 412, 413],
         "企鹅": [376, 377, 378, 379, 380, 381, 382, 383, 400, 401],
@@ -2507,8 +2549,8 @@ export default defineComponent({
                           </template>
                           <template #content>
                             <div class="tooltip-style message-input-expression-emoji-tooltip"
-                                 v-if="emojiDescribes[emoji]">
-                              {{ emojiDescribes[emoji] }}
+                                 v-if="getEmojiDescription(emoji)">
+                              {{ getEmojiDescription(emoji) }}
                             </div>
                           </template>
                         </Tooltip>

@@ -27,6 +27,7 @@ import { formatTimeOptions, parseJSON } from "./others.js";
 import UnparsedJSON from "../components/MessageTypes/MessageJSON/UnparsedJSON.vue";
 import ActivityMD from "../components/MessageTypes/MessageJSON/ActivityMD.vue";
 import UnparsedMessage from "../components/MessageTypes/UnparsedMessage.vue";
+import { getPokeDescription } from "./faces-config.js";
 
 const formatTime = (message) => {
   if (!message?.time) return
@@ -282,14 +283,7 @@ const parseMessagePreview = (message, returnPromise = false, replyMode = false) 
           }
         } else if (item.type === 'poke') {
           const poke_id = item.data.id
-          const poke_name = ({
-            1: '戳一戳',
-            2: '比心',
-            3: '点赞',
-            4: '心碎',
-            5: '666',
-            6: "放大招"
-          })[poke_id]
+          const poke_name = getPokeDescription(poke_id)
           children.push(`[${poke_name || '未解析的戳一戳'}]`)
           if (!poke_name) {
             console.log("Unparsed poke message segment:", item)

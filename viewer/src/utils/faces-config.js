@@ -53,7 +53,19 @@ const secretEmojiids = [
   "422", "423",
 ]
 
+function getPokeDescription(poke_id) {
+  return ({
+    1: '戳一戳',
+    2: '比心',
+    3: '点赞',
+    4: '心碎',
+    5: '666',
+    6: "放大招"
+  })[poke_id]
+}
+
 export {
   otherFacesDescribes,
-  secretEmojiids
+  secretEmojiids,
+  getPokeDescription,
 }
