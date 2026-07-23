@@ -416,7 +416,7 @@ export class ConnectionBridgeOnebot {
       const allMsgs = [...apiMessages, ...dbMessages];
       for (const msg of allMsgs) {
         const realSeq = msg.real_seq ?? msg.message_seq;
-        if (realSeq !== null && realSeq !== undefined) {
+        if (realSeq !== null && realSeq !== undefined && !Number.isNaN(realSeq)) {
           const key = `${msg.post_type}_${realSeq}`;
           merged.set(key, msg);
         } else {
