@@ -21,6 +21,7 @@
     "ant-design-vue": "^4.2.6",
     "axios": "1.18.1",
     "clipboardy": "^5.3.1",
+    "dexie": "^4.4.4",
     "dompurify": "^3.4.12",
     "eventemitter3": "^5.0.4",
     "hash-wasm": "^4.12.0",

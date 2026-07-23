@@ -1,6 +1,7 @@
 <script setup>
 import { onMounted, onUnmounted, ref, watch, onBeforeUnmount } from 'vue'
 import { ConnectionBridge } from './composables/ConnectionBridge.js'
+import { ConnectionBridgeOnebot } from "./composables/VirtualBackend/ConnectionBridgeOnebot.js";
 import ContactList from './components/ContactList.vue'
 import ChatArea from './components/ChatArea.vue'
 import {
@@ -8,7 +9,7 @@ import {
   fetchEssenceMessages, fetchLoginInfo,
   fetchMessages, fetchSetGroupRemark, fetchSetLongNick, fetchStrangerInfo,
   getFriendsDisplayName,
-  getGroupUsersDisplayName, setGroupNameCache, wsUri
+  getGroupUsersDisplayName, onebotWsToken, onebotWsUri, setGroupNameCache, wsUri
 } from "./utils/backend-api.js";
 import { showErrorToast, showToast } from "./utils/toast.js";
 import { destroyContextMenu, initContextMenu } from "./utils/context-menu.js";
@@ -248,8 +249,12 @@ const destroy = () => {
 onMounted(() => {
   initContextMenu()
 
+  const isDirectOnebot = !!onebotWsUri
+  const Bridge = isDirectOnebot ? ConnectionBridgeOnebot : ConnectionBridge
+  const url = isDirectOnebot ? { url: onebotWsUri, token: onebotWsToken } : wsUri
+
   // ========== 在onMounted内部初始化 ConnectionBridge ==========
-  bridge = new ConnectionBridge(wsUri, {
+  bridge = new Bridge(url, {
     onMessage: (message) => {
       // 检查消息是否属于当前活跃的联系人
       const isCurrentContact = activeContact.value && (

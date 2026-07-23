@@ -16,6 +16,8 @@ import {
 
 let apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
 let wsUri = import.meta.env.VITE_WS_URI;
+const onebotWsUri = import.meta.env.VITE_ONEBOT_WS_URI;
+const onebotWsToken = import.meta.env.VITE_ONEBOT_WS_TOKEN;
 
 if (import.meta.env.PROD) {
   console.log('当前是生产环境');
@@ -935,6 +937,8 @@ export {
   fetchSendFileStream,
   apiBaseUrl,
   wsUri,
+  onebotWsUri,
+  onebotWsToken,
   getGroupLogo,
   getUserLogo,
   fetchStrangerInfo,
