@@ -196,11 +196,14 @@ class VirtualDB extends Dexie {
         const noticeType = msg.notice_type;
 
         let event = null;
-        try { event = msg.event ? JSON.parse(msg.event) : null; } catch { }
+        try {
+          event = msg.event ? JSON.parse(msg.event) : null;
+        } catch {
+        }
 
         // 私聊消息
         if (targetId && targetId !== 0 && subType === 'friend' &&
-            (postType === 'message' || postType === 'message_sent')) {
+          (postType === 'message' || postType === 'message_sent')) {
           const key = `private_${targetId}`;
           if (!privateMap.has(key) || privateMap.get(key).id < msg.id) {
             privateMap.set(key, {
@@ -216,7 +219,7 @@ class VirtualDB extends Dexie {
 
         // 私聊戳一戳通知
         if (userId && userId !== 0 && !groupId && subType === 'poke' &&
-            noticeType === 'notify' && postType === 'notice') {
+          noticeType === 'notify' && postType === 'notice') {
           const key = `private_${userId}`;
           if (!privateMap.has(key) || privateMap.get(key).id < msg.id) {
             privateMap.set(key, {
@@ -232,7 +235,7 @@ class VirtualDB extends Dexie {
 
         // 群聊消息
         if (groupId && groupId !== 0 && subType === 'normal' &&
-            (postType === 'message' || postType === 'message_sent')) {
+          (postType === 'message' || postType === 'message_sent')) {
           const key = `group_${groupId}`;
           if (!groupMap.has(key) || groupMap.get(key).id < msg.id) {
             groupMap.set(key, {
@@ -248,8 +251,8 @@ class VirtualDB extends Dexie {
 
         // 群聊通知
         if (groupId && groupId !== 0 && postType === 'notice' &&
-            ['poke', 'add', 'ban', 'lift_ban', 'approve', 'invite', 'kick_me', 'remove'].includes(subType) &&
-            ['notify', 'essence', 'group_ban', 'group_increase', 'group_decrease', 'group_msg_emoji_like'].includes(noticeType)) {
+          ['poke', 'add', 'ban', 'lift_ban', 'approve', 'invite', 'kick_me', 'remove'].includes(subType) &&
+          ['notify', 'essence', 'group_ban', 'group_increase', 'group_decrease', 'group_msg_emoji_like'].includes(noticeType)) {
           const key = `group_${groupId}`;
           if (!groupMap.has(key) || groupMap.get(key).id < msg.id) {
             groupMap.set(key, {
@@ -302,7 +305,7 @@ class VirtualDB extends Dexie {
      */
     this.processRecallEvent = async (event) => {
       if (event.post_type !== 'notice' ||
-          !['group_recall', 'friend_recall'].includes(event.notice_type)) {
+        !['group_recall', 'friend_recall'].includes(event.notice_type)) {
         return null;
       }
 
@@ -314,7 +317,11 @@ class VirtualDB extends Dexie {
 
       let originalEvent = originalMsg.event;
       if (typeof originalEvent === 'string') {
-        try { originalEvent = JSON.parse(originalEvent); } catch { return null; }
+        try {
+          originalEvent = JSON.parse(originalEvent);
+        } catch {
+          return null;
+        }
       }
 
       originalEvent.recall_operator = event.notice_type === 'group_recall'
@@ -324,8 +331,72 @@ class VirtualDB extends Dexie {
       const updatedEvent = JSON.stringify(originalEvent);
       await this.messages.update(originalMsg.id, { event: updatedEvent });
 
-      return { ...originalMsg, event: originalEvent };
-    };
+      /**
+       * 获取与指定通知消息最接近的前后消息
+       * 对应 Python db.py 的 get_nearest_message_to_notice
+       * @param {number} noticeId - 通知消息的 ID
+       * @param {number|null} groupId - 群组 ID 筛选
+       * @param {number|null} targetId - 目标 ID 筛选
+       * @param {boolean} getAfter - 是否获取 id 较大的后一条消息
+       * @param {boolean} getBefore - 是否获取 id 较小的前一条消息
+       * @returns {Promise<{before: object|null, after: object|null}|object|null>}
+       */
+      this.getNearestMessageToNotice = async (noticeId, groupId = null, targetId = null, getAfter = true, getBefore = true) => {
+        const notice = await this.messages.get(parseInt(noticeId, 10));
+        if (!notice) return getBefore && !getAfter ? null : getAfter && !getBefore ? null : {
+          before: null,
+          after: null
+        };
+
+        const result = {};
+
+        if (getBefore) {
+          let collection = this.messages
+            .where('id')
+            .below(notice.id)
+            .filter(m =>
+              (m.post_type === 'message' || m.post_type === 'message_sent') &&
+              (m.message_type === 'group' || m.post_type === 'private') &&
+              (m.sub_type === 'normal' || m.sub_type === 'friend' || m.sub_type === 'group')
+            );
+          if (groupId) {
+            const msgs = await collection.toArray();
+            result.before = msgs.filter(m => m.group_id === groupId).pop() || null;
+          } else if (targetId) {
+            const msgs = await collection.toArray();
+            result.before = msgs.filter(m => m.target_id === targetId).pop() || null;
+          } else {
+            const msgs = await collection.toArray();
+            result.before = msgs.pop() || null;
+          }
+        }
+
+        if (getAfter) {
+          let collection = this.messages
+            .where('id')
+            .above(notice.id)
+            .filter(m =>
+              (m.post_type === 'message' || m.post_type === 'message_sent') &&
+              (m.message_type === 'group' || m.post_type === 'private') &&
+              (m.sub_type === 'normal' || m.sub_type === 'friend' || m.sub_type === 'group')
+            );
+          if (groupId) {
+            const msgs = await collection.toArray();
+            result.after = msgs.filter(m => m.group_id === groupId).shift() || null;
+          } else if (targetId) {
+            const msgs = await collection.toArray();
+            result.after = msgs.filter(m => m.target_id === targetId).shift() || null;
+          } else {
+            const msgs = await collection.toArray();
+            result.after = msgs.shift() || null;
+          }
+        }
+
+        if (!getBefore && getAfter) return result.after;
+        if (getBefore && !getAfter) return result.before;
+        return result;
+      };
+    }
   }
 }
 

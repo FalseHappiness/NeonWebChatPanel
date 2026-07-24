@@ -1,7 +1,7 @@
 <script setup>
 import { onMounted, onUnmounted, ref, watch, onBeforeUnmount } from 'vue'
-import { ConnectionBridge } from './composables/ConnectionBridge.js'
-import { ConnectionBridgeOnebot } from "./composables/VirtualBackend/ConnectionBridgeOnebot.js";
+import { ConnectionBridge } from './composables/connection-bridge.js'
+import { ConnectionBridgeOnebot } from "./composables/VirtualBackend/connection-bridge-onebot.js";
 import ContactList from './components/ContactList.vue'
 import ChatArea from './components/ChatArea.vue'
 import {
@@ -9,7 +9,7 @@ import {
   fetchEssenceMessages, fetchLoginInfo,
   fetchMessages, fetchSetGroupRemark, fetchSetLongNick, fetchStrangerInfo,
   getFriendsDisplayName,
-  getGroupUsersDisplayName, onebotWsToken, onebotWsUri, setGroupNameCache, wsUri
+  getGroupUsersDisplayName, isDirectOnebot, onebotWsToken, onebotWsUri, setGroupNameCache, wsUri
 } from "./utils/backend-api.js";
 import { showErrorToast, showToast } from "./utils/toast.js";
 import { destroyContextMenu, initContextMenu } from "./utils/context-menu.js";
@@ -17,6 +17,7 @@ import "./App.css"
 import { CalledEmitter } from "./composables/event-bus.js";
 import ContactInfoTooltip from "./components/utils/ContactInfoTooltip.vue";
 import { isSupportedNoticeMessage } from "./utils/parse-message.js";
+import DownloadProgressPopup from "./components/utils/DownloadProgressPopup.vue";
 
 const contacts = ref([])
 const loadingContacts = ref(false)
@@ -246,10 +247,19 @@ const destroy = () => {
   CalledEmitter.off('reqBackend')
 }
 
+const showDownloadPopup = ref(false)
+const downloadInfo = ref(null)
+
+function handleDownload(info) {
+  // 只有直连 OneBot 模式才需要弹窗（非直连模式由 Python 后端处理）
+  if (!isDirectOnebot) return;
+  downloadInfo.value = info;
+  showDownloadPopup.value = true;
+}
+
 onMounted(() => {
   initContextMenu()
 
-  const isDirectOnebot = !!onebotWsUri
   const Bridge = isDirectOnebot ? ConnectionBridgeOnebot : ConnectionBridge
   const url = isDirectOnebot ? { url: onebotWsUri, token: onebotWsToken } : wsUri
 
@@ -362,7 +372,7 @@ onMounted(() => {
   watch(bridge.isConnected, val => {
     isConnected.value = val
     if (val) {
-      console.log('WebSocket reconnected, checking for missed messages...')
+      console.log(`WebSocket ${wsInited ? '' : 're'}connected, checking for missed messages...`)
       wsInited.value = true;
     }
   })
@@ -373,6 +383,11 @@ onMounted(() => {
   // 提供 sendAction 和 reqBackend 给子组件
   CalledEmitter.on("sendAction", bridge.sendAction.bind(bridge))
   CalledEmitter.on("reqBackend", bridge.reqBackend.bind(bridge))
+
+  // 直连 OneBot 模式：设置下载进度回调
+  if (bridge.virtualProtocol) {
+    bridge.virtualProtocol.setDownloadHandler(handleDownload)
+  }
 });
 
 onBeforeUnmount(destroy)
@@ -402,6 +417,13 @@ onUnmounted(destroy)
       @change-group-contact-remark="changeGroupContactRemark"
     />
     <ContactInfoTooltip/>
+    <!-- 下载进度弹窗 -->
+    <DownloadProgressPopup
+      v-if="showDownloadPopup && downloadInfo"
+      :download-info="downloadInfo"
+      @close="showDownloadPopup = false"
+      @confirm="showDownloadPopup = false"
+    />
   </div>
   <div class="text-center" v-else>
     WebSocket 初始化...

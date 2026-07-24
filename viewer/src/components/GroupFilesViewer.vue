@@ -4,7 +4,7 @@ import {
   fetchGroupRootFiles,
   fetchGroupFolderFiles,
   fetchGroupFileSysInfo,
-  getFileDataUrl, getGroupFileProxyUrl
+  getFileDataUrl, getGroupFileProxyUrl, isDirectOnebot, fetchGroupFileUrl
 } from "../utils/backend-api.js";
 import { formatTimeOptions } from "../utils/others.js";
 import { getFileIcon, formatFileSize } from "./MessageTypes/FileMessage.vue";

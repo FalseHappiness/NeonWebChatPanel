@@ -2,10 +2,11 @@
 import { defineComponent } from 'vue'
 import TruncatedText from "../../utils/TruncatedText.vue";
 import { getMultimediaProxyUrl } from "../../../utils/backend-api.js"
+import BasicBoxWithFooter from "./BasicBoxWithFooter.vue";
 
 export default defineComponent({
   name: "StructMsg",
-  components: { TruncatedText },
+  components: { BasicBoxWithFooter, TruncatedText },
   props: { json: Object },
   computed: {
     view() {
@@ -19,19 +20,19 @@ export default defineComponent({
 </script>
 
 <template>
-  <a class="message-box-less message-struct-msg" target="_blank" :href="view.jumpUrl">
+  <BasicBoxWithFooter
+    class="message-struct-msg"
+    :footer-icon="view.tagIcon"
+    :footer-text="view.tag"
+    :jump-url="view.jumpUrl">
     <div class="top-side">
       <p class="title text-truncate">{{ view.title }}</p>
       <div class="middle-content">
-        <span v-if="view.desc" class="text-muted">{{ view.desc }}</span>
-        <img alt="" :src="getMultimediaProxyUrl(view.preview)" class="preview-image">
+        <span class="text-muted">{{ view.desc || '' }}</span>
+        <img alt="" :src="view.preview" class="preview-image">
       </div>
     </div>
-    <div class="footer" v-if="view.tag || view.tagIcon">
-      <hr>
-      <span class="text-muted">{{ view.tag }}</span>
-    </div>
-  </a>
+  </BasicBoxWithFooter>
 </template>
 
 <style scoped>
@@ -43,22 +44,9 @@ export default defineComponent({
   color: black;
   text-decoration: none !important;
   border-radius: 8px;
-  padding: 12px 10px;
+  padding: 8px 8px 2px 8px !important;
   flex-direction: column;
   justify-content: space-between;
-}
-
-hr {
-  height: 1px;
-  border: 0;
-  margin: 10px 0 0 0;
-  width: 100%;
-  background-color: #f2f2f2;
-}
-
-.footer {
-  height: 30px;
-  white-space: nowrap;
 }
 
 .title {
@@ -73,6 +61,8 @@ hr {
 
 .middle-content {
   display: flex;
+  justify-content: space-between;
+  padding: 5px;
 }
 
 .text-muted {

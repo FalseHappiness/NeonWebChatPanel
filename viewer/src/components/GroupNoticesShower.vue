@@ -54,7 +54,7 @@ export default defineComponent({
       })
     },
     getNoticeImageUrl(picId) {
-      return getMultimediaProxyUrl(getGroupNoticePicUrl(picId))
+      return getGroupNoticePicUrl(picId)
     },
     renderText(text) {
       return convertMessageTextHTMLSyntax(text)

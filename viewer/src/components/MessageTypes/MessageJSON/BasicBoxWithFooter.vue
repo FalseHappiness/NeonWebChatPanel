@@ -18,7 +18,7 @@ export default defineComponent({
     <slot></slot>
     <hr>
     <div class="footer">
-      <img alt="" :src="footerIcon">
+      <img v-if="footerIcon" alt="" :src="footerIcon">
       <span class="text-muted">{{ footerText }}</span>
     </div>
   </BasicBox>

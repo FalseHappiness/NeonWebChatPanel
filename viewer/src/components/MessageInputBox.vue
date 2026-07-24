@@ -390,7 +390,7 @@ export default defineComponent({
       const handleError = task => {
         return error => {
           task.error = error?.message || error
-          console.log("Send file error:", error)
+          console.error("Send file error:", error)
         }
       }
       for (const file of minFiles) {

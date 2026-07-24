@@ -22,7 +22,7 @@ const isLoaded = ref(false)
       <span class="text-muted">{{ detail.title }}</span>
     </div>
     <span class="desc">{{ detail.desc }}</span>
-    <img :style="{ height: isLoaded ? 'auto' : '196px' }" @load="isLoaded = true" alt="" :src="getMultimediaProxyUrl(detail.preview)"
+    <img :style="{ height: isLoaded ? 'auto' : '196px' }" @load="isLoaded = true" alt="" :src="detail.preview"
          class="preview-image"/>
     <hr>
     <div class="footer">

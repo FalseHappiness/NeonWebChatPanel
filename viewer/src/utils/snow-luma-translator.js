@@ -129,7 +129,6 @@ function translateEssenceMsgContent(msgContent) {
             file_size: item.file_size,
             file_id: item.file_id,
             bus_id: item.file_bus_id,
-            url: getStreamFileDataUrl(item.file_id),
           }
         };
       default:

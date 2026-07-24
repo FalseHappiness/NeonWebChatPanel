@@ -362,7 +362,7 @@ const parseMessage = (wrappedMsg) => {
           } else if (item.type === 'file') {
             children.push(
               h(FileMessage, {
-                url: getStreamFileDataUrl(item),
+                url: item.data.url || getStreamFileDataUrl(item),
                 name: item.data.file,
                 size: item.data.file_size,
               })
@@ -498,7 +498,7 @@ const parseMessage = (wrappedMsg) => {
                 'message-image' +
                 ((message.length === 1) ? " message-box-less" : "") +
                 (item.data.hasOwnProperty("emoji_id") || item.data.summary === '[动画表情]' ? " message-emoji-picture" : ""),
-              fallbackSrc: item.data.hasOwnProperty("emoji_id") ? getMultimediaProxyUrl(item.data.url) : getStreamFileDataUrl(item),
+              fallbackSrc: item.data.hasOwnProperty("emoji_id") ? getMultimediaProxyUrl(image_src) : getStreamFileDataUrl(item),
               decideMaxWidth: '.message-container'
             })
           );
@@ -587,7 +587,7 @@ const parseNoticePreview = (notice, returnPromise = false) => {
             children.push(
               h('img', {
                 alt: '',
-                src: getMultimediaProxyUrl(item.src),
+                src: item.src,
                 class: 'msg-preview-emoji',
               })
             )
@@ -757,7 +757,7 @@ const parseNotice = notice => {
           } else if (item.type === 'img') {
             let element = h('img', {
               alt: '',
-              src: getMultimediaProxyUrl(item.src),
+              src: item.src,
               class: 'notice-emoji-png',
             })
             const jumpLink = item.jp

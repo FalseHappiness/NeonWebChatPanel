@@ -18,7 +18,11 @@ let apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
 let wsUri = import.meta.env.VITE_WS_URI;
 const onebotWsUri = import.meta.env.VITE_ONEBOT_WS_URI;
 const onebotWsToken = import.meta.env.VITE_ONEBOT_WS_TOKEN;
+const isDirectOnebot = !!onebotWsUri;
 
+if (typeof wsUri === 'string') {
+  wsUri = wsUri.replace(/\/$/, '')
+}
 if (import.meta.env.PROD) {
   console.log('当前是生产环境');
   const { protocol, host } = window.location;
@@ -855,6 +859,14 @@ const fetchContacts = async () => {
   return convertContactsSL(await fetchBackendData("contacts"))
 }
 
+const getApiBaseUrl = () => {
+  if (isDirectOnebot) {
+    return "virtual:"
+  } else {
+    return apiBaseUrl
+  }
+}
+
 const getMultimediaProxyUrl = (url) => {
   return `${apiBaseUrl}/api/proxy_multimedia?url=${encodeURIComponent(url)}`
 }
@@ -874,7 +886,7 @@ const getFileDataUrl = (file_id, type) => {
   }
 
   type = type || 'file'
-  return `${apiBaseUrl}/api/get_file_data?type=${encodeURIComponent(type)}&file_id=${encodeURIComponent(file_id)}`
+  return `${getApiBaseUrl()}/api/get_file_data?type=${encodeURIComponent(type)}&file_id=${encodeURIComponent(file_id)}`
 }
 
 const getStreamFileDataUrl = file_id => {
@@ -882,7 +894,7 @@ const getStreamFileDataUrl = file_id => {
     const data = file_id
     file_id = data?.data?.file_id || data?.data?.file
   }
-  return `${apiBaseUrl}/api/get_stream_file_data?file_id=${encodeURIComponent(file_id)}`
+  return `${getApiBaseUrl()}/api/get_stream_file_data?file_id=${encodeURIComponent(file_id)}`
 }
 
 const getGroupLogo = (group_id, size = 100) => {
@@ -902,7 +914,7 @@ const isSnowLuma = () => {
 }
 
 const getGroupFileProxyUrl = (group_id, file_id, name) => {
-  return `${apiBaseUrl}/api/proxy_group_file?group_id=${group_id}&file_id=${encodeURIComponent(file_id)}&name=${encodeURIComponent(name)}`
+  return `${getApiBaseUrl()}/api/proxy_group_file?group_id=${group_id}&file_id=${encodeURIComponent(file_id)}&name=${encodeURIComponent(name)}`
 }
 
 export {
@@ -956,4 +968,5 @@ export {
   fetchSendGroupAiRecord,
   fetchGroupAlbumList,
   fetchGroupAlbumMediaList,
+  isDirectOnebot,
 }
